@@ -1,0 +1,98 @@
+import { useState } from 'react';
+import { Brain } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+
+type AuthMode = 'sign-in' | 'sign-up';
+
+export default function AuthPage() {
+  const [mode, setMode] = useState<AuthMode>('sign-in');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const isSignIn = mode === 'sign-in';
+
+  const submit = async () => {
+    if (!email.trim() || !password) return;
+
+    setIsLoading(true);
+    setMessage('');
+
+    const { error } = isSignIn
+      ? await supabase.auth.signInWithPassword({ email, password })
+      : await supabase.auth.signUp({ email, password });
+
+    setIsLoading(false);
+
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+
+    if (!isSignIn) {
+      setMessage('Compte cree. Verifie tes emails si Supabase demande une confirmation.');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center px-4">
+      <div className="w-full max-w-md mx-auto bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+        <div className="w-14 h-14 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center mb-4">
+          <Brain className="w-8 h-8" />
+        </div>
+
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">
+          {isSignIn ? 'Connexion' : 'Creer un compte'}
+        </h1>
+        <p className="text-sm text-gray-500 mb-6">
+          Connecte-toi pour retrouver tes paquets personnels et acceder aux paquets publics.
+        </p>
+
+        <div className="space-y-3">
+          <input
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            type="email"
+            placeholder="Email"
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+          />
+
+          <input
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            type="password"
+            placeholder="Mot de passe"
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+          />
+
+          <button
+            onClick={submit}
+            disabled={isLoading || !email.trim() || !password}
+            className={`w-full py-3 rounded-lg font-semibold ${
+              isLoading || !email.trim() || !password
+                ? 'bg-gray-300 text-gray-500'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+          >
+            {isLoading ? 'Chargement...' : isSignIn ? 'Se connecter' : 'Creer le compte'}
+          </button>
+        </div>
+
+        {message && (
+          <p className="mt-4 text-sm text-center text-gray-600">{message}</p>
+        )}
+
+        <button
+          onClick={() => {
+            setMode(isSignIn ? 'sign-up' : 'sign-in');
+            setMessage('');
+          }}
+          className="mt-6 w-full text-sm text-blue-600 font-medium"
+        >
+          {isSignIn ? 'Creer un compte' : 'J ai deja un compte'}
+        </button>
+      </div>
+    </div>
+  );
+}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
-import { supabase, Deck, Flashcard } from '../lib/supabase';
+import { User } from '@supabase/supabase-js';
+import { Plus } from 'lucide-react';
+import { supabase, Deck, Flashcard, Profile } from '../lib/supabase';
 
 
 const DIFFICULTY_COLORS = {
@@ -11,11 +12,17 @@ const DIFFICULTY_COLORS = {
   5: '#EF4444',
 };
 
-export default function DeckCreator() {
+interface DeckCreatorProps {
+  user: User;
+  profile: Profile;
+}
+
+export default function DeckCreator({ user, profile }: DeckCreatorProps) {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [selectedDeck, setSelectedDeck] = useState<Deck | null>(null);
   const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
   const [newDeckName, setNewDeckName] = useState('');
+  const [newDeckVisibility, setNewDeckVisibility] = useState<'personal' | 'public'>('personal');
   const [newQuestion, setNewQuestion] = useState('');
   const [newAnswer, setNewAnswer] = useState('');
   const [newDifficulty, setNewDifficulty] = useState(1);
@@ -33,15 +40,23 @@ export default function DeckCreator() {
 
   useEffect(() => {
     loadDecks();
-  }, []);
+  }, [profile.role, user.id]);
+
+  const isAdmin = profile.role === 'admin';
 
   useEffect(() => {
     if (selectedDeck) loadFlashcards(selectedDeck.id);
   }, [selectedDeck]);
 
   const loadDecks = async () => {
-    const { data } = await supabase.from('decks').select('*');
-    if (data) setDecks(data);
+    const { data } = await supabase
+      .from('decks')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (data) {
+      setDecks(data.filter((deck) => canEditDeck(deck)));
+    }
   };
 
   const loadFlashcards = async (deckId: string) => {
@@ -58,13 +73,18 @@ export default function DeckCreator() {
 
     const { data } = await supabase
       .from('decks')
-      .insert([{ name: newDeckName }])
+      .insert([{
+        name: newDeckName,
+        owner_id: user.id,
+        visibility: isAdmin ? newDeckVisibility : 'personal',
+      }])
       .select()
       .single();
 
     if (data) {
       setDecks([data, ...decks]);
       setNewDeckName('');
+      setNewDeckVisibility('personal');
     }
   };
 
@@ -83,6 +103,11 @@ export default function DeckCreator() {
   
       setEditingDeck(null);
     }
+  };
+
+  const canEditDeck = (deck: Deck) => {
+    return (deck.visibility === 'public' && isAdmin)
+      || (deck.visibility === 'personal' && deck.owner_id === user.id);
   };
 
   const deleteDeck = async (id: string) => {
@@ -402,6 +427,31 @@ export default function DeckCreator() {
         className="w-full p-2 border rounded mb-2"
       />
 
+      {isAdmin && (
+        <div className="flex gap-2 mb-3">
+          <button
+            onClick={() => setNewDeckVisibility('personal')}
+            className={`flex-1 py-2 rounded text-sm font-medium ${
+              newDeckVisibility === 'personal'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white border border-gray-200 text-gray-700'
+            }`}
+          >
+            Personnel
+          </button>
+          <button
+            onClick={() => setNewDeckVisibility('public')}
+            className={`flex-1 py-2 rounded text-sm font-medium ${
+              newDeckVisibility === 'public'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white border border-gray-200 text-gray-700'
+            }`}
+          >
+            Public
+          </button>
+        </div>
+      )}
+
       <button
         onClick={createDeck}
         className="bg-blue-600 text-white px-4 py-2 rounded mb-4"
@@ -422,6 +472,13 @@ export default function DeckCreator() {
   className="flex-1 text-left flex items-center gap-2"
 >
   <span>{deck.name}</span>
+  <span className={`text-xs px-2 py-0.5 rounded-full ${
+    deck.visibility === 'public'
+      ? 'bg-green-100 text-green-700'
+      : 'bg-gray-100 text-gray-600'
+  }`}>
+    {deck.visibility === 'public' ? 'Public' : 'Perso'}
+  </span>
 
   {deckHasQuarantine(deck.id) && (
     <span className="text-yellow-500 text-base">☢</span>

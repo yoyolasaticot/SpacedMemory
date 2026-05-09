@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { User } from '@supabase/supabase-js';
 import { Check, ChevronLeft, RotateCcw } from 'lucide-react';
-import { supabase, Deck, Flashcard } from '../lib/supabase';
+import { supabase, Deck, Flashcard, ReviewProgress } from '../lib/supabase';
 
 type ReviewView = 'select' | 'review' | 'done';
 type Rating = 'again' | 'hard' | 'good' | 'easy';
@@ -37,7 +38,11 @@ const REVIEW_OPTIONS: Array<{
   },
 ];
 
-export default function ReviewPage() {
+interface ReviewPageProps {
+  user: User;
+}
+
+export default function ReviewPage({ user }: ReviewPageProps) {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [dueCountsByDeck, setDueCountsByDeck] = useState<Record<string, number>>({});
   const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>([]);
@@ -50,7 +55,7 @@ export default function ReviewPage() {
 
   useEffect(() => {
     loadDecks();
-  }, []);
+  }, [user.id]);
 
   const currentCard = cards[currentIndex] ?? null;
   const selectedCount = selectedDeckIds.length;
@@ -79,18 +84,21 @@ export default function ReviewPage() {
   };
 
   const loadReviewCounts = async () => {
-    const now = new Date().toISOString();
     const { data, error } = await supabase
       .from('flashcards')
-      .select('deck_id')
-      .eq('status', 'active')
-      .or(`review_due_at.is.null,review_due_at.lte.${now}`);
+      .select('id, deck_id')
+      .eq('status', 'active');
 
     if (error || !data) {
       return;
     }
 
-    const nextCounts = data.reduce<Record<string, number>>((counts, card) => {
+    const progressByCard = await loadProgressByCard(data.map(card => card.id));
+    const now = new Date();
+
+    const nextCounts = data.filter(card => {
+      return isCardDue(progressByCard[card.id], now);
+    }).reduce<Record<string, number>>((counts, card) => {
       counts[card.deck_id] = (counts[card.deck_id] ?? 0) + 1;
       return counts;
     }, {});
@@ -112,14 +120,11 @@ export default function ReviewPage() {
     setIsLoading(true);
     setMessage('');
 
-    const now = new Date().toISOString();
     const { data, error } = await supabase
       .from('flashcards')
       .select('*')
       .in('deck_id', selectedDeckIds)
-      .eq('status', 'active')
-      .or(`review_due_at.is.null,review_due_at.lte.${now}`)
-      .order('review_due_at', { ascending: true, nullsFirst: true });
+      .eq('status', 'active');
 
     setIsLoading(false);
 
@@ -134,7 +139,17 @@ export default function ReviewPage() {
       return;
     }
 
-    setCards(shuffle(data));
+    const progressByCard = await loadProgressByCard(data.map(card => card.id));
+    const now = new Date();
+    const dueCards = data.filter(card => isCardDue(progressByCard[card.id], now));
+
+    if (dueCards.length === 0) {
+      setCards([]);
+      setMessage('Aucune carte due pour ces paquets.');
+      return;
+    }
+
+    setCards(shuffle(dueCards));
     setCurrentIndex(0);
     setShowAnswer(false);
     setView('review');
@@ -143,12 +158,22 @@ export default function ReviewPage() {
   const rateCurrentCard = async (rating: Rating) => {
     if (!currentCard) return;
 
-    const schedule = getNextSchedule(currentCard, rating);
+    const { data: existingProgress } = await supabase
+      .from('review_progress')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('flashcard_id', currentCard.id)
+      .maybeSingle();
+
+    const schedule = getNextSchedule(existingProgress, rating);
 
     const { error } = await supabase
-      .from('flashcards')
-      .update(schedule)
-      .eq('id', currentCard.id);
+      .from('review_progress')
+      .upsert({
+        user_id: user.id,
+        flashcard_id: currentCard.id,
+        ...schedule,
+      });
 
     if (error) {
       setMessage("La note n'a pas pu etre enregistree.");
@@ -164,6 +189,27 @@ export default function ReviewPage() {
     setCurrentIndex(prev => prev + 1);
     setShowAnswer(false);
     setMessage('');
+  };
+
+  const loadProgressByCard = async (flashcardIds: string[]) => {
+    if (flashcardIds.length === 0) {
+      return {};
+    }
+
+    const { data, error } = await supabase
+      .from('review_progress')
+      .select('*')
+      .eq('user_id', user.id)
+      .in('flashcard_id', flashcardIds);
+
+    if (error || !data) {
+      return {};
+    }
+
+    return data.reduce<Record<string, ReviewProgress>>((progressByCard, progress) => {
+      progressByCard[progress.flashcard_id] = progress;
+      return progressByCard;
+    }, {});
   };
 
   const resetReview = () => {
@@ -336,9 +382,9 @@ export default function ReviewPage() {
   );
 }
 
-function getNextSchedule(card: Flashcard, rating: Rating) {
-  const previousInterval = card.review_interval_days ?? 0;
-  const previousStreak = card.review_streak ?? 0;
+function getNextSchedule(progress: ReviewProgress | null, rating: Rating) {
+  const previousInterval = progress?.review_interval_days ?? 0;
+  const previousStreak = progress?.review_streak ?? 0;
   const reviewedAt = new Date();
   const nextDueAt = new Date(reviewedAt);
 
@@ -379,6 +425,14 @@ function getNextSchedule(card: Flashcard, rating: Rating) {
     review_interval_days: nextIntervalDays,
     review_streak: nextStreak,
   };
+}
+
+function isCardDue(progress: ReviewProgress | undefined, now: Date) {
+  if (!progress?.review_due_at) {
+    return true;
+  }
+
+  return new Date(progress.review_due_at) <= now;
 }
 
 function shuffle<T>(items: T[]) {

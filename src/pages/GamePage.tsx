@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { User } from '@supabase/supabase-js';
 import { ChevronLeft, X } from 'lucide-react';
-import { supabase, Deck, Flashcard } from '../lib/supabase';
+import { supabase, Deck, Flashcard, Profile } from '../lib/supabase';
 
 const COLOR_OPTIONS = [
   '#3B82F6', // Blue
@@ -27,10 +28,12 @@ const DIFFICULTY_COLORS = {
 };
 
 interface GamePageProps {
+  user: User;
+  profile: Profile;
   setIsGameInProgress: (value: boolean) => void;
 }
 
-export default function GamePage({ setIsGameInProgress }: GamePageProps) {
+export default function GamePage({ user, profile, setIsGameInProgress }: GamePageProps) {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [selectedDecksWithColor, setSelectedDecksWithColor] = useState<Map<string, string>>(new Map());
   const [allFlashcards, setAllFlashcards] = useState<Flashcard[]>([]);
@@ -88,6 +91,14 @@ export default function GamePage({ setIsGameInProgress }: GamePageProps) {
   const allSelectedDecksHaveColor =
     selectedDecksWithColor.size > 0 &&
     Array.from(selectedDecksWithColor.values()).every(color => color !== UNSET_COLOR);
+
+  const canEditDeck = (deckId: string | null) => {
+    const deck = decks.find(item => item.id === deckId);
+    if (!deck) return false;
+
+    return (deck.visibility === 'public' && profile.role === 'admin')
+      || (deck.visibility === 'personal' && deck.owner_id === user.id);
+  };
 
   const startGame = async () => {
     if (!allSelectedDecksHaveColor) return;
@@ -264,12 +275,14 @@ export default function GamePage({ setIsGameInProgress }: GamePageProps) {
                   Appuyez une fois pour voir la réponse, puis une seconde fois pour revenir aux paquets
                 </p>
 
-                <button
-                  onClick={() => setConfirmQuarantineOpen(true)}
-                  className="w-full px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-medium"
-                >
-                  Mettre cette carte en quarantaine
-                </button>
+                {canEditDeck(currentCardDeckId) && (
+                  <button
+                    onClick={() => setConfirmQuarantineOpen(true)}
+                    className="w-full px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-medium"
+                  >
+                    Mettre cette carte en quarantaine
+                  </button>
+                )}
               </div>
             </div>
           ) : (
@@ -439,7 +452,12 @@ export default function GamePage({ setIsGameInProgress }: GamePageProps) {
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-800">{deck.name}</span>
+                      <div>
+                        <span className="font-medium text-gray-800">{deck.name}</span>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {deck.visibility === 'public' ? 'Paquet public' : 'Paquet personnel'}
+                        </div>
+                      </div>
                       {selectedDecksWithColor.has(deck.id) && (
                         <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center">
                           <svg
