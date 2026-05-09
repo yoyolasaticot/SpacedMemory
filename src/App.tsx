@@ -2,17 +2,20 @@ import { useState } from 'react';
 import Navigation from './components/Navigation';
 import DeckCreator from './pages/DeckCreator';
 import GamePage from './pages/GamePage';
+import ReviewPage from './pages/ReviewPage';
+
+type Page = 'creator' | 'game' | 'review';
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<'creator' | 'game'>('creator');
+  const [currentPage, setCurrentPage] = useState<Page>('creator');
   const [isGameInProgress, setIsGameInProgress] = useState(false);
-  const [pendingPage, setPendingPage] = useState<'creator' | 'game' | null>(null);
+  const [pendingPage, setPendingPage] = useState<Page | null>(null);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
 
-  const handleNavigate = (page: 'creator' | 'game') => {
+  const handleNavigate = (page: Page) => {
     if (
       currentPage === 'game' &&
-      page === 'creator' &&
+      page !== 'game' &&
       isGameInProgress
     ) {
       setPendingPage(page);
@@ -41,11 +44,13 @@ function App() {
     <div className="min-h-screen bg-gray-50 pb-20">
       <Navigation currentPage={currentPage} onNavigate={handleNavigate} />
 
-      {currentPage === 'creator' ? (
-        <DeckCreator />
-      ) : (
+      {currentPage === 'creator' && <DeckCreator />}
+
+      {currentPage === 'game' && (
         <GamePage setIsGameInProgress={setIsGameInProgress} />
       )}
+
+      {currentPage === 'review' && <ReviewPage />}
 
       {confirmLeaveOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

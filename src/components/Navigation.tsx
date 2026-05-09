@@ -1,8 +1,8 @@
-import { BookOpen, Play } from 'lucide-react';
+import { BookOpen, Brain, Play } from 'lucide-react';
 
 interface NavigationProps {
-  currentPage: 'creator' | 'game';
-  onNavigate: (page: 'creator' | 'game') => void;
+  currentPage: 'creator' | 'game' | 'review';
+  onNavigate: (page: 'creator' | 'game' | 'review') => void;
 }
 
 export default function Navigation({ currentPage, onNavigate }: NavigationProps) {
@@ -31,6 +31,18 @@ export default function Navigation({ currentPage, onNavigate }: NavigationProps)
         >
           <Play className="w-6 h-6 mb-1" />
           <span className="text-xs font-medium">Jouer</span>
+        </button>
+
+        <button
+          onClick={() => onNavigate('review')}
+          className={`flex-1 flex flex-col items-center justify-center py-4 transition-all ${
+            currentPage === 'review'
+              ? 'text-blue-600 border-t-2 border-blue-600'
+              : 'text-gray-600'
+          }`}
+        >
+          <Brain className="w-6 h-6 mb-1" />
+          <span className="text-xs font-medium">Reviser</span>
         </button>
       </div>
     </nav>
