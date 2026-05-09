@@ -8,13 +8,21 @@ export default function AuthPage() {
   const [mode, setMode] = useState<AuthMode>('sign-in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const isSignIn = mode === 'sign-in';
+  const passwordsMatch = isSignIn || password === confirmPassword;
+  const canSubmit = Boolean(email.trim() && password && passwordsMatch);
 
   const submit = async () => {
-    if (!email.trim() || !password) return;
+    if (!canSubmit) {
+      if (!isSignIn && password !== confirmPassword) {
+        setMessage('Les mots de passe ne correspondent pas.');
+      }
+      return;
+    }
 
     setIsLoading(true);
     setMessage('');
@@ -66,11 +74,25 @@ export default function AuthPage() {
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
           />
 
+          {!isSignIn && (
+            <input
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              type="password"
+              placeholder="Confirmer le mot de passe"
+              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm ${
+                confirmPassword && !passwordsMatch
+                  ? 'border-red-400'
+                  : 'border-gray-300'
+              }`}
+            />
+          )}
+
           <button
             onClick={submit}
-            disabled={isLoading || !email.trim() || !password}
+            disabled={isLoading || !canSubmit}
             className={`w-full py-3 rounded-lg font-semibold ${
-              isLoading || !email.trim() || !password
+              isLoading || !canSubmit
                 ? 'bg-gray-300 text-gray-500'
                 : 'bg-blue-600 text-white hover:bg-blue-700'
             }`}
@@ -87,6 +109,7 @@ export default function AuthPage() {
           onClick={() => {
             setMode(isSignIn ? 'sign-up' : 'sign-in');
             setMessage('');
+            setConfirmPassword('');
           }}
           className="mt-6 w-full text-sm text-blue-600 font-medium"
         >
