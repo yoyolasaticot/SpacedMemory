@@ -14,25 +14,25 @@ const REVIEW_OPTIONS: Array<{
   {
     rating: 'again',
     label: 'Rate',
-    detail: 'Revient tres vite',
+    detail: 'Prochaine session',
     className: 'bg-red-600 hover:bg-red-700',
   },
   {
     rating: 'hard',
     label: 'Difficile',
-    detail: 'Revient demain',
+    detail: 'Dans 6 heures',
     className: 'bg-orange-600 hover:bg-orange-700',
   },
   {
     rating: 'good',
     label: 'Correct',
-    detail: 'Espace la carte',
+    detail: 'Demain',
     className: 'bg-blue-600 hover:bg-blue-700',
   },
   {
     rating: 'easy',
     label: 'Facile',
-    detail: 'Espace beaucoup',
+    detail: 'Dans 2 jours',
     className: 'bg-green-600 hover:bg-green-700',
   },
 ];
@@ -306,6 +306,7 @@ function getNextSchedule(card: Flashcard, rating: Rating) {
   const previousInterval = card.review_interval_days ?? 0;
   const previousStreak = card.review_streak ?? 0;
   const reviewedAt = new Date();
+  const nextDueAt = new Date(reviewedAt);
 
   let nextIntervalDays = 1;
   let nextStreak = 0;
@@ -313,31 +314,28 @@ function getNextSchedule(card: Flashcard, rating: Rating) {
   if (rating === 'again') {
     nextIntervalDays = 0;
     nextStreak = 0;
+    nextDueAt.setTime(reviewedAt.getTime());
   }
 
   if (rating === 'hard') {
-    nextIntervalDays = 1;
+    nextIntervalDays = 0;
     nextStreak = 0;
+    nextDueAt.setHours(nextDueAt.getHours() + 6);
   }
 
   if (rating === 'good') {
     nextStreak = Math.max(1, previousStreak);
     nextIntervalDays = previousInterval <= 1
-      ? 2
-      : Math.min(90, Math.ceil(previousInterval * 1.8));
+      ? 1
+      : Math.min(90, Math.ceil(previousInterval * 1.7));
+    nextDueAt.setDate(nextDueAt.getDate() + nextIntervalDays);
   }
 
   if (rating === 'easy') {
     nextStreak = previousStreak + 1;
     nextIntervalDays = previousInterval <= 1
-      ? 4
-      : Math.min(180, Math.ceil(previousInterval * (2.2 + nextStreak * 0.25)));
-  }
-
-  const nextDueAt = new Date(reviewedAt);
-  if (rating === 'again') {
-    nextDueAt.setHours(nextDueAt.getHours() + 4);
-  } else {
+      ? 2
+      : Math.min(180, Math.ceil(previousInterval * (1.9 + nextStreak * 0.2)));
     nextDueAt.setDate(nextDueAt.getDate() + nextIntervalDays);
   }
 
