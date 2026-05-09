@@ -39,6 +39,7 @@ const REVIEW_OPTIONS: Array<{
 
 export default function ReviewPage() {
   const [decks, setDecks] = useState<Deck[]>([]);
+  const [dueCountsByDeck, setDueCountsByDeck] = useState<Record<string, number>>({});
   const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>([]);
   const [cards, setCards] = useState<Flashcard[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -53,6 +54,10 @@ export default function ReviewPage() {
 
   const currentCard = cards[currentIndex] ?? null;
   const selectedCount = selectedDeckIds.length;
+  const selectedDueCount = selectedDeckIds.reduce(
+    (total, deckId) => total + (dueCountsByDeck[deckId] ?? 0),
+    0
+  );
   const progress = cards.length > 0 ? Math.round((currentIndex / cards.length) * 100) : 0;
 
   const currentDeckName = useMemo(() => {
@@ -69,6 +74,28 @@ export default function ReviewPage() {
     if (!error && data) {
       setDecks(data);
     }
+
+    await loadReviewCounts();
+  };
+
+  const loadReviewCounts = async () => {
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('flashcards')
+      .select('deck_id')
+      .eq('status', 'active')
+      .or(`review_due_at.is.null,review_due_at.lte.${now}`);
+
+    if (error || !data) {
+      return;
+    }
+
+    const nextCounts = data.reduce<Record<string, number>>((counts, card) => {
+      counts[card.deck_id] = (counts[card.deck_id] ?? 0) + 1;
+      return counts;
+    }, {});
+
+    setDueCountsByDeck(nextCounts);
   };
 
   const toggleDeck = (deckId: string) => {
@@ -145,6 +172,7 @@ export default function ReviewPage() {
     setShowAnswer(false);
     setView('select');
     setMessage('');
+    loadReviewCounts();
   };
 
   if (view === 'review' && currentCard) {
@@ -254,6 +282,7 @@ export default function ReviewPage() {
         <div className="space-y-2 mb-6">
           {decks.map(deck => {
             const isSelected = selectedDeckIds.includes(deck.id);
+            const dueCount = dueCountsByDeck[deck.id] ?? 0;
 
             return (
               <button
@@ -264,7 +293,12 @@ export default function ReviewPage() {
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-gray-800">{deck.name}</span>
+                  <div>
+                    <span className="font-medium text-gray-800">{deck.name}</span>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {dueCount} carte{dueCount > 1 ? 's' : ''} a reviser
+                    </div>
+                  </div>
                   <span
                     className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
                       isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
@@ -292,7 +326,7 @@ export default function ReviewPage() {
           ? 'Chargement...'
           : selectedCount === 0
             ? 'Selectionne au moins un paquet'
-            : `Reviser ${selectedCount} paquet${selectedCount > 1 ? 's' : ''}`}
+            : `Reviser ${selectedDueCount} carte${selectedDueCount > 1 ? 's' : ''}`}
       </button>
 
       {message && (
