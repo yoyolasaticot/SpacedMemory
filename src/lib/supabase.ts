@@ -28,10 +28,6 @@ export interface Flashcard {
   answer: string;
   difficulty: number;
   status: 'active' | 'quarantine';
-  review_due_at: string | null;
-  review_interval_days: number | null;
-  review_streak: number | null;
-  last_reviewed_at: string | null;
   created_at: string;
 }
 
