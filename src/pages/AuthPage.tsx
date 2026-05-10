@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Brain, Sparkles } from 'lucide-react';
+import { Brain } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 type AuthMode = 'sign-in' | 'sign-up';
@@ -52,10 +52,6 @@ export default function AuthPage() {
               <Brain className="w-8 h-8" />
             </div>
             <div>
-              <div className="flex items-center gap-1 text-xs font-bold uppercase tracking-[0.18em] text-white/75">
-                <Sparkles className="w-3.5 h-3.5" />
-                Memoire en orbite
-              </div>
               <h1 className="text-3xl font-black leading-tight">
                 Spaced Memory
               </h1>

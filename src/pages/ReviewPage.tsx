@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { User } from '@supabase/supabase-js';
-import { Check, ChevronLeft, Orbit, RotateCcw, Sparkles } from 'lucide-react';
+import { Check, ChevronLeft, RotateCcw } from 'lucide-react';
 import { supabase, Deck, Flashcard, ReviewProgress } from '../lib/supabase';
 
 type ReviewView = 'select' | 'review' | 'done';
@@ -348,13 +348,9 @@ export default function ReviewPage({ user }: ReviewPageProps) {
     <div className="min-h-screen app-shell pt-4 pb-24 px-4">
       <div className="mission-strip p-5 mb-6">
         <div className="relative z-10">
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-white/75 mb-2">
-            <Orbit className="w-4 h-4" />
-            Revision espacee
-          </div>
-          <h1 className="text-3xl font-black leading-tight">Lance ta session</h1>
+          <h1 className="text-3xl font-black leading-tight">Révision</h1>
           <p className="text-sm text-white/78 mt-2">
-            Les cartes dues sont melangees pour garder le cerveau en mouvement.
+            Choisis un ou plusieurs paquets.
           </p>
         </div>
       </div>
@@ -381,7 +377,6 @@ export default function ReviewPage({ user }: ReviewPageProps) {
                   <div>
                     <span className="font-medium text-gray-800">{deck.name}</span>
                     <div className="text-xs text-gray-500 mt-1">
-                      <Sparkles className="inline w-3 h-3 mr-1 text-amber-500" />
                       {dueCount} carte{dueCount > 1 ? 's' : ''} a reviser
                     </div>
                   </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User } from '@supabase/supabase-js';
-import { ChevronLeft, Orbit, Sparkles, X } from 'lucide-react';
+import { ChevronLeft, X } from 'lucide-react';
 import { supabase, Deck, Flashcard, Profile } from '../lib/supabase';
 
 const COLOR_OPTIONS = [
@@ -247,14 +247,7 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
 
           <div className="mission-strip p-5 mb-6">
             <div className="relative z-10">
-              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-white/75 mb-2">
-                <Sparkles className="w-4 h-4" />
-                Mode Jeu
-              </div>
-              <h1 className="text-3xl font-black leading-tight">Choisis une pile</h1>
-              <p className="text-sm text-white/78 mt-2">
-                Les paquets de meme couleur partagent la meme trajectoire.
-              </p>
+              <h1 className="text-3xl font-black leading-tight">Mode jeu</h1>
             </div>
           </div>
 
@@ -349,7 +342,6 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
                         </div>
 
                         <div className="absolute bottom-3 text-sm opacity-90">
-                          <Orbit className="inline w-4 h-4 mr-1" />
                           {remainingCount}/{totalCount} carte{totalCount > 1 ? 's' : ''} restante{remainingCount > 1 ? 's' : ''}
                         </div>
                       </div>
@@ -468,14 +460,7 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
         <div className="px-4">
           <div className="mission-strip p-5 mb-6">
             <div className="relative z-10">
-              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-white/75 mb-2">
-                <Orbit className="w-4 h-4" />
-                Composer une partie
-              </div>
-              <h1 className="text-3xl font-black leading-tight">Assemble tes orbites</h1>
-              <p className="text-sm text-white/78 mt-2">
-                Une couleur peut regrouper plusieurs paquets dans une seule pile.
-              </p>
+              <h1 className="text-3xl font-black leading-tight">Sélectionner les paquets</h1>
             </div>
           </div>
 
