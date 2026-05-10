@@ -1,3 +1,151 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --space-ink: #171626;
+  --space-violet: #6d5dfc;
+  --space-teal: #20c7b5;
+  --space-amber: #f5b84b;
+  --space-rose: #e75776;
+  --surface: rgba(255, 255, 255, 0.9);
+  --surface-strong: #ffffff;
+  --line: rgba(64, 58, 110, 0.14);
+}
+
+@layer base {
+  html {
+    background: #f5f7fb;
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+    background:
+      linear-gradient(135deg, rgba(109, 93, 252, 0.12), transparent 28%),
+      linear-gradient(225deg, rgba(32, 199, 181, 0.12), transparent 32%),
+      #f5f7fb;
+    color: var(--space-ink);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  button,
+  input {
+    font: inherit;
+  }
+}
+
+@layer components {
+  .app-shell {
+    position: relative;
+    isolation: isolate;
+    background:
+      repeating-radial-gradient(ellipse at top left, rgba(109, 93, 252, 0.12) 0 1px, transparent 1px 74px),
+      repeating-radial-gradient(ellipse at bottom right, rgba(32, 199, 181, 0.1) 0 1px, transparent 1px 92px),
+      linear-gradient(180deg, #fbfcff 0%, #f3f7fb 44%, #eef7f5 100%);
+  }
+
+  .app-shell::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgba(23, 22, 38, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(23, 22, 38, 0.035) 1px, transparent 1px);
+    background-size: 28px 28px;
+    mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.72), transparent 78%);
+  }
+
+  .app-topbar {
+    margin: 0.75rem 1rem 0;
+    padding: 0.75rem 0.875rem;
+    border: 1px solid var(--line);
+    border-radius: 0.5rem;
+    background: rgba(255, 255, 255, 0.78);
+    box-shadow: 0 10px 28px rgba(37, 35, 74, 0.08);
+    backdrop-filter: blur(14px);
+  }
+
+  .app-panel {
+    border: 1px solid var(--line);
+    background: var(--surface);
+    box-shadow: 0 16px 42px rgba(37, 35, 74, 0.1);
+    backdrop-filter: blur(12px);
+  }
+
+  .app-card {
+    border: 1px solid var(--line);
+    background: var(--surface-strong);
+    box-shadow: 0 10px 24px rgba(37, 35, 74, 0.08);
+  }
+
+  .app-input {
+    border-color: rgba(64, 58, 110, 0.18);
+    background: rgba(255, 255, 255, 0.92);
+  }
+
+  .app-input:focus {
+    border-color: var(--space-teal);
+    box-shadow: 0 0 0 3px rgba(32, 199, 181, 0.18);
+  }
+
+  .app-input-error {
+    border-color: var(--space-rose);
+  }
+
+  .app-primary {
+    background: linear-gradient(135deg, var(--space-teal), var(--space-violet));
+    color: white;
+    box-shadow: 0 12px 24px rgba(70, 91, 210, 0.22);
+  }
+
+  .app-primary:hover {
+    filter: saturate(1.08) brightness(0.98);
+  }
+
+  .app-danger {
+    background: linear-gradient(135deg, var(--space-rose), #c93f6d);
+    color: white;
+  }
+
+  .app-muted-button {
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.78);
+    color: #47435f;
+  }
+
+  .app-nav {
+    border-top: 1px solid rgba(64, 58, 110, 0.16);
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 -18px 40px rgba(37, 35, 74, 0.12);
+    backdrop-filter: blur(16px);
+  }
+
+  .app-nav-item {
+    color: #696580;
+  }
+
+  .app-nav-item-active {
+    color: var(--space-violet);
+  }
+
+  .app-nav-item-active::before {
+    content: "";
+    position: absolute;
+    top: 0.45rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2rem;
+    height: 0.1875rem;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--space-teal), var(--space-violet));
+  }
+
+  .difficulty-chip {
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.38), 0 8px 16px rgba(37, 35, 74, 0.12);
+  }
+}

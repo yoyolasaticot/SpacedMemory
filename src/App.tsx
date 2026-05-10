@@ -90,8 +90,8 @@ function App() {
 
   if (isAuthLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-sm font-medium text-gray-500">Chargement...</div>
+      <div className="min-h-screen app-shell flex items-center justify-center">
+        <div className="text-sm font-medium text-slate-500">Chargement...</div>
       </div>
     );
   }
@@ -101,19 +101,19 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      <div className="px-4 pt-3 flex justify-between items-center">
-        <div className="text-xs text-gray-500 truncate pr-3">
+    <div className="min-h-screen app-shell pb-20">
+      <div className="app-topbar flex justify-between items-center">
+        <div className="text-xs text-slate-500 truncate pr-3">
           {profile.email || user.email}
           {profile.role === 'admin' && (
-            <span className="ml-2 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold">
+            <span className="ml-2 px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 font-semibold">
               Admin
             </span>
           )}
         </div>
         <button
           onClick={() => supabase.auth.signOut()}
-          className="text-xs font-semibold text-red-600"
+          className="text-xs font-semibold text-rose-600"
         >
           Deconnexion
         </button>
@@ -130,8 +130,8 @@ function App() {
       {currentPage === 'review' && <ReviewPage user={user} />}
 
       {confirmLeaveOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-sm">
+        <div className="fixed inset-0 bg-slate-950/50 flex items-center justify-center z-50 p-4">
+          <div className="app-panel rounded-lg p-6 w-full max-w-sm">
             <h3 className="text-lg font-bold text-gray-800 mb-4">
               Quitter la partie ?
             </h3>
@@ -143,14 +143,14 @@ function App() {
             <div className="flex gap-2">
               <button
                 onClick={confirmLeaveGame}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                className="flex-1 px-4 py-2 app-danger rounded-lg transition-colors"
               >
                 Quitter
               </button>
 
               <button
                 onClick={cancelLeaveGame}
-                className="flex-1 px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition-colors"
+                className="flex-1 px-4 py-2 app-muted-button rounded-lg transition-colors"
               >
                 Annuler
               </button>

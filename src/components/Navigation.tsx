@@ -7,14 +7,14 @@ interface NavigationProps {
 
 export default function Navigation({ currentPage, onNavigate }: NavigationProps) {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-2xl z-50">
+    <nav className="fixed bottom-0 left-0 right-0 app-nav z-50">
       <div className="flex">
         <button
           onClick={() => onNavigate('creator')}
-          className={`flex-1 flex flex-col items-center justify-center py-4 transition-all ${
+          className={`relative flex-1 flex flex-col items-center justify-center py-4 transition-all ${
             currentPage === 'creator'
-              ? 'text-blue-600 border-t-2 border-blue-600'
-              : 'text-gray-600'
+              ? 'app-nav-item-active'
+              : 'app-nav-item'
           }`}
         >
           <BookOpen className="w-6 h-6 mb-1" />
@@ -23,10 +23,10 @@ export default function Navigation({ currentPage, onNavigate }: NavigationProps)
 
         <button
           onClick={() => onNavigate('game')}
-          className={`flex-1 flex flex-col items-center justify-center py-4 transition-all ${
+          className={`relative flex-1 flex flex-col items-center justify-center py-4 transition-all ${
             currentPage === 'game'
-              ? 'text-blue-600 border-t-2 border-blue-600'
-              : 'text-gray-600'
+              ? 'app-nav-item-active'
+              : 'app-nav-item'
           }`}
         >
           <Play className="w-6 h-6 mb-1" />
@@ -35,10 +35,10 @@ export default function Navigation({ currentPage, onNavigate }: NavigationProps)
 
         <button
           onClick={() => onNavigate('review')}
-          className={`flex-1 flex flex-col items-center justify-center py-4 transition-all ${
+          className={`relative flex-1 flex flex-col items-center justify-center py-4 transition-all ${
             currentPage === 'review'
-              ? 'text-blue-600 border-t-2 border-blue-600'
-              : 'text-gray-600'
+              ? 'app-nav-item-active'
+              : 'app-nav-item'
           }`}
         >
           <Brain className="w-6 h-6 mb-1" />

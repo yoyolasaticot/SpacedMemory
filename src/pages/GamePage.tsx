@@ -20,11 +20,11 @@ const COLOR_OPTIONS = [
 const UNSET_COLOR = 'UNSET';
 
 const DIFFICULTY_COLORS = {
-  1: '#030082', // Blue
-  2: '#17a72a', // Green
-  3: '#f6e501', // Yellow
-  4: '#fd7c1e', // Orange
-  5: '#d22727', // Red
+  1: '#4F46E5', // Violet
+  2: '#14B8A6', // Teal
+  3: '#F59E0B', // Amber
+  4: '#F97316', // Orange
+  5: '#E11D48', // Rose
 };
 
 interface GamePageProps {
@@ -47,7 +47,7 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
   const [confirmExitOpen, setConfirmExitOpen] = useState(false);
   const [confirmQuarantineOpen, setConfirmQuarantineOpen] = useState(false);
   const [allCardsDoneOpen, setAllCardsDoneOpen] = useState(false);
-  const [finishedDeckId, setFinishedDeckId] = useState<string | null>(null);
+  const [finishedPileColor, setFinishedPileColor] = useState<string | null>(null);
 
   useEffect(() => {
     loadDecks();
@@ -81,13 +81,6 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
     setColorSelectionModalOpen(false);
   };
 
-  const isColorAlreadyUsedByAnotherDeck = (color: string, deckId: string) => {
-    return Array.from(selectedDecksWithColor.entries()).some(
-      ([selectedDeckId, selectedColor]) =>
-        selectedDeckId !== deckId && selectedColor === color
-    );
-  };
-
   const allSelectedDecksHaveColor =
     selectedDecksWithColor.size > 0 &&
     Array.from(selectedDecksWithColor.values()).every(color => color !== UNSET_COLOR);
@@ -118,12 +111,12 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
       setIsFlipped(false);
       setUsedFlashcards([]);
       setAllCardsDoneOpen(false);
-      setFinishedDeckId(null);
+      setFinishedPileColor(null);
       setView('play');
     }
   };
 
-  const showRandomCard = (cards: Flashcard[]) => {
+  const showRandomCard = (cards: Flashcard[], pileColor: string) => {
     if (cards.length === 0) return;
 
     const availableCards = cards.filter(
@@ -131,8 +124,7 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
     );
 
     if (availableCards.length === 0) {
-      const deckId = cards[0].deck_id;
-      setFinishedDeckId(deckId);
+      setFinishedPileColor(pileColor);
       setAllCardsDoneOpen(true);
       return;
     }
@@ -147,10 +139,17 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
     setUsedFlashcards(prev => [...prev, card.id]);
   };
 
-  const handleDeckClick = (deckId: string) => {
-    const deckCards = allFlashcards.filter(card => card.deck_id === deckId);
-    if (deckCards.length > 0) {
-      showRandomCard(deckCards);
+  const getDeckIdsForColor = (color: string) => {
+    return Array.from(selectedDecksWithColor.entries())
+      .filter(([, selectedColor]) => selectedColor === color)
+      .map(([deckId]) => deckId);
+  };
+
+  const handlePileClick = (color: string) => {
+    const deckIds = getDeckIdsForColor(color);
+    const pileCards = allFlashcards.filter(card => deckIds.includes(card.deck_id));
+    if (pileCards.length > 0) {
+      showRandomCard(pileCards, color);
     }
   };
 
@@ -179,10 +178,11 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
   };
 
   const resetFinishedDeck = () => {
-    if (!finishedDeckId) return;
+    if (!finishedPileColor) return;
 
+    const finishedDeckIds = getDeckIdsForColor(finishedPileColor);
     const finishedDeckCardIds = allFlashcards
-      .filter(card => card.deck_id === finishedDeckId)
+      .filter(card => finishedDeckIds.includes(card.deck_id))
       .map(card => card.id);
 
     setUsedFlashcards(prev =>
@@ -192,7 +192,7 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
     setCurrentCard(null);
     setCurrentCardDeckId(null);
     setIsFlipped(false);
-    setFinishedDeckId(null);
+    setFinishedPileColor(null);
     setAllCardsDoneOpen(false);
   };
 
@@ -208,23 +208,38 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
     setConfirmExitOpen(false);
     setConfirmQuarantineOpen(false);
     setAllCardsDoneOpen(false);
-    setFinishedDeckId(null);
+    setFinishedPileColor(null);
   };
 
   if (view === 'play') {
     const selectedDecks = decks.filter(deck => selectedDecksWithColor.has(deck.id));
+    const selectedPiles = Array.from(
+      selectedDecks.reduce<Map<string, Deck[]>>((piles, deck) => {
+        const color = selectedDecksWithColor.get(deck.id);
+        if (!color || color === UNSET_COLOR) return piles;
+
+        const pileDecks = piles.get(color) ?? [];
+        piles.set(color, [...pileDecks, deck]);
+        return piles;
+      }, new Map())
+    ).map(([color, pileDecks]) => ({ color, decks: pileDecks }));
     const currentDeck = decks.find(d => d.id === currentCardDeckId);
     const currentDeckColor = currentDeck
       ? selectedDecksWithColor.get(currentDeck.id) || '#3B82F6'
       : '#3B82F6';
-    const finishedDeck = decks.find(d => d.id === finishedDeckId);
+    const currentPileDeckIds = getDeckIdsForColor(currentDeckColor);
+    const currentPileRemainingCount = allFlashcards.filter(
+      card => currentPileDeckIds.includes(card.deck_id) && !usedFlashcards.includes(card.id)
+    ).length;
+    const finishedPile = selectedPiles.find(pile => pile.color === finishedPileColor);
+    const finishedPileName = finishedPile?.decks.map(deck => deck.name).join(', ');
 
     return (
-      <div className="min-h-screen bg-gray-50 pt-4 pb-24">
+      <div className="min-h-screen app-shell pt-4 pb-24">
         <div className="px-4">
           <button
             onClick={() => setConfirmExitOpen(true)}
-            className="flex items-center text-blue-600 mb-4 font-medium"
+            className="flex items-center text-violet-700 mb-4 font-medium"
           >
             <ChevronLeft className="w-5 h-5 mr-1" />
             <span>Retour</span>
@@ -271,6 +286,10 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
               </div>
 
               <div className="space-y-3">
+                <p className="text-gray-700 text-center text-sm font-semibold">
+                  Il reste {currentPileRemainingCount} carte{currentPileRemainingCount > 1 ? 's' : ''} dans cette pile
+                </p>
+
                 <p className="text-gray-600 text-center text-sm">
                   Appuyez une fois pour voir la réponse, puis une seconde fois pour revenir aux paquets
                 </p>
@@ -287,36 +306,39 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
             </div>
           ) : (
             <div className="space-y-4">
-              <p className="text-gray-500 text-center">Cliquez sur un paquet pour commencer</p>
+              <p className="text-gray-500 text-center">Cliquez sur une pile pour commencer</p>
 
               <div className="grid grid-cols-2 gap-2">
-                {selectedDecks.map((deck) => {
-                  const deckCardCount = allFlashcards.filter(
-                    card => card.deck_id === deck.id
+                {selectedPiles.map((pile) => {
+                  const pileDeckIds = pile.decks.map(deck => deck.id);
+                  const pileCards = allFlashcards.filter(
+                    card => pileDeckIds.includes(card.deck_id)
+                  );
+                  const remainingCount = pileCards.filter(
+                    card => !usedFlashcards.includes(card.id)
                   ).length;
-                  const selectedColor = selectedDecksWithColor.get(deck.id);
-                  const deckColor =
-                    selectedColor && selectedColor !== UNSET_COLOR ? selectedColor : '#9CA3AF';
+                  const totalCount = pileCards.length;
+                  const pileName = pile.decks.map(deck => deck.name).join(' + ');
 
                   return (
                     <button
-                      key={deck.id}
-                      onClick={() => handleDeckClick(deck.id)}
+                      key={pile.color}
+                      onClick={() => handlePileClick(pile.color)}
                       className="relative text-left transition-transform hover:scale-[1.02] active:scale-[0.98]"
                     >
-                      <div className="absolute inset-0 translate-x-2 translate-y-2 rounded-2xl bg-gray-300 opacity-40" />
-                      <div className="absolute inset-0 translate-x-1 translate-y-1 rounded-2xl bg-gray-200 opacity-60" />
+                      <div className="absolute inset-0 translate-x-2 translate-y-2 rounded-2xl bg-violet-200 opacity-40" />
+                      <div className="absolute inset-0 translate-x-1 translate-y-1 rounded-2xl bg-teal-100 opacity-70" />
 
                       <div
                         className="relative p-5 rounded-2xl shadow-xl text-white min-h-[300px] flex flex-col justify-center items-center border border-white/20"
-                        style={{ backgroundColor: deckColor }}
+                        style={{ backgroundColor: pile.color }}
                       >
                         <div className="font-bold text-4xl text-center leading-snug break-words">
-                          {deck.name}
+                          {pileName}
                         </div>
 
                         <div className="absolute bottom-3 text-sm opacity-90">
-                          {deckCardCount} carte{deckCardCount > 1 ? 's' : ''}
+                          {remainingCount}/{totalCount} carte{totalCount > 1 ? 's' : ''} restante{remainingCount > 1 ? 's' : ''}
                         </div>
                       </div>
                     </button>
@@ -328,8 +350,8 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
         </div>
 
         {confirmExitOpen && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 w-full max-w-sm">
+          <div className="fixed inset-0 bg-slate-950/50 flex items-center justify-center z-50 p-4">
+            <div className="app-panel rounded-lg p-6 w-full max-w-sm">
               <h3 className="text-lg font-bold text-gray-800 mb-4">
                 Quitter la partie ?
               </h3>
@@ -341,14 +363,14 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
               <div className="flex gap-2">
                 <button
                   onClick={resetGame}
-                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg"
+                  className="flex-1 px-4 py-2 app-danger rounded-lg"
                 >
                   Quitter
                 </button>
 
                 <button
                   onClick={() => setConfirmExitOpen(false)}
-                  className="flex-1 px-4 py-2 bg-gray-300 rounded-lg"
+                  className="flex-1 px-4 py-2 app-muted-button rounded-lg"
                 >
                   Annuler
                 </button>
@@ -358,8 +380,8 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
         )}
 
         {confirmQuarantineOpen && currentCard && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 w-full max-w-sm">
+          <div className="fixed inset-0 bg-slate-950/50 flex items-center justify-center z-50 p-4">
+            <div className="app-panel rounded-lg p-6 w-full max-w-sm">
               <h3 className="text-lg font-bold text-gray-800 mb-4">
                 Mettre la carte en quarantaine ?
               </h3>
@@ -378,7 +400,7 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
 
                 <button
                   onClick={() => setConfirmQuarantineOpen(false)}
-                  className="flex-1 px-4 py-2 bg-gray-300 rounded-lg"
+                  className="flex-1 px-4 py-2 app-muted-button rounded-lg"
                 >
                   Annuler
                 </button>
@@ -388,31 +410,31 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
         )}
 
         {allCardsDoneOpen && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 w-full max-w-sm">
+          <div className="fixed inset-0 bg-slate-950/50 flex items-center justify-center z-50 p-4">
+            <div className="app-panel rounded-lg p-6 w-full max-w-sm">
               <h3 className="text-lg font-bold text-gray-800 mb-4">
-                Fin du paquet
+                Fin de la pile
               </h3>
 
               <p className="text-sm text-gray-600 mb-6">
                 Toutes les cartes du paquet
-                {finishedDeck ? ` "${finishedDeck.name}"` : ''} ont déjà été tirées.
+                {finishedPileName ? ` "${finishedPileName}"` : ''} ont deja ete tirees.
               </p>
 
               <div className="flex gap-2">
                 <button
                   onClick={resetFinishedDeck}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg"
+                  className="flex-1 px-4 py-2 app-primary rounded-lg"
                 >
                   Recommencer
                 </button>
 
                 <button
                   onClick={() => {
-                    setFinishedDeckId(null);
+                    setFinishedPileColor(null);
                     setAllCardsDoneOpen(false);
                   }}
-                  className="flex-1 px-4 py-2 bg-gray-300 rounded-lg"
+                  className="flex-1 px-4 py-2 app-muted-button rounded-lg"
                 >
                   Fermer
                 </button>
@@ -430,7 +452,7 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
     ).filter(Boolean) as Deck[];
 
     return (
-      <div className="min-h-screen bg-gray-50 pt-4 pb-24">
+      <div className="min-h-screen app-shell pt-4 pb-24">
         <div className="px-4">
           <h1 className="text-2xl font-bold text-gray-800 mb-6">Sélectionner les paquets</h1>
 
@@ -448,7 +470,7 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
                     className={`w-full p-4 rounded-lg border-2 text-left transition-all ${
                       selectedDecksWithColor.has(deck.id)
                         ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 bg-white'
+                        : 'border-gray-200 bg-white/90'
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -459,7 +481,7 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
                         </div>
                       </div>
                       {selectedDecksWithColor.has(deck.id) && (
-                        <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center">
+                        <div className="w-6 h-6 bg-violet-600 rounded-full flex items-center justify-center">
                           <svg
                             className="w-4 h-4 text-white"
                             fill="none"
@@ -479,7 +501,7 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
               </div>
 
               {selectedDecks.length > 0 && (
-                <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200">
+                <div className="mb-6 p-4 app-panel rounded-lg">
                   <p className="text-sm text-gray-600 font-medium mb-3">Choisir les couleurs</p>
                   <div className="space-y-2">
                     {selectedDecks.map((deck) => {
@@ -515,7 +537,7 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
                 className={`w-full py-4 rounded-lg font-semibold text-lg transition-all ${
                   !allSelectedDecksHaveColor
                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-green-600 text-white active:bg-green-700'
+                    : 'app-primary active:brightness-95'
                 }`}
               >
                 {selectedDecksWithColor.size === 0
@@ -529,8 +551,8 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
         </div>
 
         {colorSelectionModalOpen && selectedDeckForColor && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end z-50 p-4">
-            <div className="bg-white rounded-t-2xl p-6 w-full">
+          <div className="fixed inset-0 bg-slate-950/50 flex items-end z-50 p-4">
+            <div className="app-panel rounded-t-2xl p-6 w-full">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold text-gray-800">Couleur pour {selectedDeckForColor.name}</h3>
                 <button
@@ -540,26 +562,20 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
                   <X className="w-5 h-5" />
                 </button>
               </div>
+              <p className="text-xs text-gray-500 mb-4">
+                Les paquets avec la meme couleur seront melanges dans une seule pile.
+              </p>
 
               <div className="grid grid-cols-5 gap-3">
                 {COLOR_OPTIONS.map((color) => {
                   const isSelectedForCurrentDeck =
                     selectedDecksWithColor.get(selectedDeckForColor.id) === color;
-                  const isUsedByAnotherDeck = isColorAlreadyUsedByAnotherDeck(
-                    color,
-                    selectedDeckForColor.id
-                  );
 
                   return (
                     <button
                       key={color}
                       onClick={() => updateDeckColor(selectedDeckForColor.id, color)}
-                      disabled={isUsedByAnotherDeck}
-                      className={`w-full aspect-square rounded-lg border-4 transition-all ${
-                        isUsedByAnotherDeck
-                          ? 'opacity-30 cursor-not-allowed'
-                          : 'hover:scale-110'
-                      }`}
+                      className="w-full aspect-square rounded-lg border-4 transition-all hover:scale-110"
                       style={{
                         backgroundColor: color,
                         borderColor: isSelectedForCurrentDeck ? '#000' : 'transparent',

@@ -5,11 +5,11 @@ import { supabase, Deck, Flashcard, Profile } from '../lib/supabase';
 
 
 const DIFFICULTY_COLORS = {
-  1: '#0c13eb',
-  2: '#34c924',
-  3: '#FFFF00',
+  1: '#4F46E5',
+  2: '#14B8A6',
+  3: '#F59E0B',
   4: '#F97316',
-  5: '#EF4444',
+  5: '#E11D48',
 };
 
 interface DeckCreatorProps {
@@ -207,10 +207,10 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
 
   if (view === 'cards' && selectedDeck) {
     return (
-      <div className="min-h-screen bg-gray-50 pt-4 px-4">
+      <div className="min-h-screen app-shell pt-4 px-4">
         <button
           onClick={() => setView('decks')}
-          className="mb-4 text-blue-600"
+          className="mb-4 text-violet-700 font-medium"
         >
           ← Retour
         </button>
@@ -224,7 +224,7 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
     onChange={(e) => setNewQuestion(e.target.value)}
     placeholder="Question"
     maxLength={200}
-    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+    className="w-full px-4 py-3 border rounded-lg outline-none text-sm app-input"
   />
   <input
     type="text"
@@ -232,7 +232,7 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
     onChange={(e) => setNewAnswer(e.target.value)}
     placeholder="Réponse"
     maxLength={200}
-    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+    className="w-full px-4 py-3 border rounded-lg outline-none text-sm app-input"
   />
 
   <div>
@@ -244,7 +244,7 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
         <button
           key={level}
           onClick={() => setNewDifficulty(level)}
-          className={`flex-1 py-2 px-3 rounded-lg font-medium text-white text-sm transition-all ${
+          className={`flex-1 py-2 px-3 rounded-lg font-medium text-white text-sm transition-all difficulty-chip ${
             newDifficulty === level ? 'ring-2 ring-offset-2 ring-gray-400' : ''
           }`}
           style={{
@@ -260,7 +260,7 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
 
   <button
     onClick={createFlashcard}
-    className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2 font-medium"
+    className="w-full px-4 py-3 app-primary rounded-lg transition-colors flex items-center justify-center space-x-2 font-medium"
   >
     <Plus className="w-5 h-5" />
     <span>Ajouter</span>
@@ -270,7 +270,7 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
         {flashcards.map((card) => (
           <div
             key={card.id}
-            className={`p-3 mb-2 bg-white rounded shadow border-l-4 ${
+            className={`p-3 mb-2 app-card rounded border-l-4 ${
               card.status === 'quarantine' ? 'opacity-60' : ''
             }`}
             style={{
@@ -291,7 +291,7 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
               {card.status === 'quarantine' && (
                 <button
                   onClick={() => reactivateFlashcard(card.id)}
-                  className="px-2 py-1 text-xs bg-green-600 text-white rounded"
+                  className="px-2 py-1 text-xs bg-teal-600 text-white rounded"
                 >
                   Réactiver
                 </button>
@@ -304,7 +304,7 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
                   setEditAnswer(card.answer);
                   setEditDifficulty(card.difficulty);
                 }}
-                className="px-2 py-1 text-xs bg-blue-600 text-white rounded"
+                className="px-2 py-1 text-xs bg-violet-600 text-white rounded"
               >
                 Modifier
               </button>
@@ -321,7 +321,7 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
 
         {editingFlashcard && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
-            <div className="bg-white p-6 rounded w-full max-w-md">
+            <div className="app-panel p-6 rounded w-full max-w-md">
               <h3 className="font-bold mb-4">Modifier la flashcard</h3>
 
               <input
@@ -341,7 +341,7 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
     <button
       key={d}
       onClick={()=>setEditDifficulty(d)}
-      className={`flex-1 py-2 px-3 rounded-lg font-medium text-white text-sm transition-all ${
+      className={`flex-1 py-2 px-3 rounded-lg font-medium text-white text-sm transition-all difficulty-chip ${
         editDifficulty === d ? 'ring-2 ring-offset-2 ring-gray-400' : ''
       }`}
       style={{
@@ -357,14 +357,14 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
               <div className="flex gap-2">
                 <button
                   onClick={updateFlashcard}
-                  className="flex-1 bg-blue-600 text-white py-2 rounded"
+                  className="flex-1 app-primary py-2 rounded"
                 >
                   Enregistrer
                 </button>
 
                 <button
                   onClick={()=>setEditingFlashcard(null)}
-                  className="flex-1 bg-gray-300 py-2 rounded"
+                  className="flex-1 app-muted-button py-2 rounded"
                 >
                   Annuler
                 </button>
@@ -375,14 +375,14 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
 
         {flashcardToDelete && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-    <div className="bg-white p-6 rounded w-full max-w-sm">
+    <div className="app-panel p-6 rounded w-full max-w-sm">
       <h3 className="font-bold mb-4">Supprimer la flashcard</h3>
 
       <p className="mb-4 text-sm text-gray-600">
         Voulez-vous vraiment supprimer cette carte ?
       </p>
 
-      <div className="mb-4 p-3 bg-gray-50 rounded border">
+      <div className="mb-4 p-3 bg-white/70 rounded border border-violet-100">
         <div className="font-semibold text-sm text-gray-800">
           {flashcardToDelete.question}
         </div>
@@ -404,7 +404,7 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
 
         <button
           onClick={() => setFlashcardToDelete(null)}
-          className="flex-1 bg-gray-300 py-2 rounded"
+          className="flex-1 app-muted-button py-2 rounded"
         >
           Annuler
         </button>
@@ -417,14 +417,14 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
   }
 
   return (
-    <div className="p-4">
+    <div className="p-4 min-h-screen app-shell">
       <h2 className="text-xl font-bold mb-4">Paquets</h2>
 
       <input
         value={newDeckName}
         onChange={(e) => setNewDeckName(e.target.value)}
         placeholder="Nom du paquet"
-        className="w-full p-2 border rounded mb-2"
+        className="w-full p-2 border rounded mb-2 app-input outline-none"
       />
 
       {isAdmin && (
@@ -433,8 +433,8 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
             onClick={() => setNewDeckVisibility('personal')}
             className={`flex-1 py-2 rounded text-sm font-medium ${
               newDeckVisibility === 'personal'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white border border-gray-200 text-gray-700'
+                ? 'app-primary'
+                : 'bg-white/90 border border-gray-200 text-gray-700'
             }`}
           >
             Personnel
@@ -443,8 +443,8 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
             onClick={() => setNewDeckVisibility('public')}
             className={`flex-1 py-2 rounded text-sm font-medium ${
               newDeckVisibility === 'public'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white border border-gray-200 text-gray-700'
+                ? 'app-primary'
+                : 'bg-white/90 border border-gray-200 text-gray-700'
             }`}
           >
             Public
@@ -454,7 +454,7 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
 
       <button
         onClick={createDeck}
-        className="bg-blue-600 text-white px-4 py-2 rounded mb-4"
+        className="app-primary px-4 py-2 rounded mb-4"
       >
         Créer
       </button>
@@ -462,7 +462,7 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
       {decks.map((deck) => (
         <div
           key={deck.id}
-          className="p-3 mb-2 bg-white rounded shadow flex justify-between items-center"
+          className="p-3 mb-2 app-card rounded flex justify-between items-center"
         >
           <button
   onClick={() => {
@@ -491,7 +491,7 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
               setEditingDeck(deck.id);
               setEditDeckName(deck.name);
             }}
-            className="px-2 py-1 text-xs bg-blue-600 text-white rounded"
+            className="px-2 py-1 text-xs bg-violet-600 text-white rounded"
           >
             Renommer
           </button>
@@ -508,7 +508,7 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
 
 {editingDeck && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
-    <div className="bg-white p-6 rounded w-full max-w-sm">
+    <div className="app-panel p-6 rounded w-full max-w-sm">
       <h3 className="font-bold mb-4">Renommer le paquet</h3>
 
       <input
@@ -520,14 +520,14 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
       <div className="flex gap-2">
         <button
           onClick={() => updateDeck(editingDeck, editDeckName)}
-          className="flex-1 bg-blue-600 text-white py-2 rounded"
+          className="flex-1 app-primary py-2 rounded"
         >
           Valider
         </button>
 
         <button
           onClick={()=>setEditingDeck(null)}
-          className="flex-1 bg-gray-300 py-2 rounded"
+          className="flex-1 app-muted-button py-2 rounded"
         >
           Annuler
         </button>
@@ -538,7 +538,7 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
 
 {deckToDelete && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
-    <div className="bg-white p-6 rounded w-full max-w-sm">
+    <div className="app-panel p-6 rounded w-full max-w-sm">
       <h3 className="font-bold mb-4">Supprimer le paquet</h3>
 
       <p className="mb-4">
@@ -558,7 +558,7 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
 
         <button
           onClick={()=>setDeckToDelete(null)}
-          className="flex-1 bg-gray-300 py-2 rounded"
+          className="flex-1 app-muted-button py-2 rounded"
         >
           Annuler
         </button>

@@ -16,7 +16,7 @@ const REVIEW_OPTIONS: Array<{
     rating: 'again',
     label: 'Rate',
     detail: 'Prochaine session',
-    className: 'bg-red-600 hover:bg-red-700',
+    className: 'bg-rose-600 hover:bg-rose-700',
   },
   {
     rating: 'hard',
@@ -28,13 +28,13 @@ const REVIEW_OPTIONS: Array<{
     rating: 'good',
     label: 'Correct',
     detail: 'Demain',
-    className: 'bg-blue-600 hover:bg-blue-700',
+    className: 'bg-violet-600 hover:bg-violet-700',
   },
   {
     rating: 'easy',
     label: 'Facile',
     detail: 'Dans 2 jours',
-    className: 'bg-green-600 hover:bg-green-700',
+    className: 'bg-teal-600 hover:bg-teal-700',
   },
 ];
 
@@ -180,6 +180,8 @@ export default function ReviewPage({ user }: ReviewPageProps) {
       return;
     }
 
+    await updateEarlyDifficulty(currentCard, rating, schedule.review_count);
+
     if (currentIndex + 1 >= cards.length) {
       setView('done');
       setShowAnswer(false);
@@ -189,6 +191,35 @@ export default function ReviewPage({ user }: ReviewPageProps) {
     setCurrentIndex(prev => prev + 1);
     setShowAnswer(false);
     setMessage('');
+  };
+
+  const updateEarlyDifficulty = async (
+    flashcard: Flashcard,
+    rating: Rating,
+    reviewCount: number
+  ) => {
+    if (reviewCount > 3) return;
+
+    const { data, error } = await supabase.rpc(
+      'adjust_flashcard_difficulty_from_review',
+      {
+        target_flashcard_id: flashcard.id,
+        review_rating: rating,
+        player_review_count: reviewCount,
+      }
+    );
+
+    if (error || typeof data !== 'number') {
+      return;
+    }
+
+    setCards(prevCards =>
+      prevCards.map(card =>
+        card.id === flashcard.id
+          ? { ...card, difficulty: data }
+          : card
+      )
+    );
   };
 
   const loadProgressByCard = async (flashcardIds: string[]) => {
@@ -223,10 +254,10 @@ export default function ReviewPage({ user }: ReviewPageProps) {
 
   if (view === 'review' && currentCard) {
     return (
-      <div className="min-h-screen bg-gray-50 pt-4 pb-24 px-4">
+      <div className="min-h-screen app-shell pt-4 pb-24 px-4">
         <button
           onClick={resetReview}
-          className="flex items-center text-blue-600 mb-4 font-medium"
+          className="flex items-center text-violet-700 mb-4 font-medium"
         >
           <ChevronLeft className="w-5 h-5 mr-1" />
           <span>Retour</span>
@@ -244,14 +275,14 @@ export default function ReviewPage({ user }: ReviewPageProps) {
 
         <div className="h-2 bg-gray-200 rounded-full mb-6 overflow-hidden">
           <div
-            className="h-full bg-blue-600 transition-all"
-            style={{ width: `${progress}%` }}
+            className="h-full transition-all"
+            style={{ width: `${progress}%`, background: 'linear-gradient(90deg, var(--space-teal), var(--space-violet))' }}
           />
         </div>
 
         <button
           onClick={() => setShowAnswer(true)}
-          className="w-full min-h-[320px] bg-white border border-gray-200 rounded-lg shadow-sm p-6 flex flex-col justify-center text-center"
+          className="w-full min-h-[320px] app-panel rounded-lg p-6 flex flex-col justify-center text-center"
         >
           <div className="text-xs font-semibold text-gray-400 mb-4">
             {showAnswer ? 'REPONSE' : 'QUESTION'}
@@ -264,7 +295,7 @@ export default function ReviewPage({ user }: ReviewPageProps) {
         {!showAnswer ? (
           <button
             onClick={() => setShowAnswer(true)}
-            className="mt-4 w-full py-3 bg-blue-600 text-white rounded-lg font-semibold"
+            className="mt-4 w-full py-3 app-primary rounded-lg font-semibold"
           >
             Afficher la reponse
           </button>
@@ -292,9 +323,9 @@ export default function ReviewPage({ user }: ReviewPageProps) {
 
   if (view === 'done') {
     return (
-      <div className="min-h-screen bg-gray-50 pt-10 pb-24 px-4 flex items-center">
-        <div className="w-full bg-white border border-gray-200 rounded-lg p-6 text-center shadow-sm">
-          <div className="w-14 h-14 rounded-full bg-green-100 text-green-700 flex items-center justify-center mx-auto mb-4">
+      <div className="min-h-screen app-shell pt-10 pb-24 px-4 flex items-center">
+        <div className="w-full app-panel rounded-lg p-6 text-center">
+          <div className="w-14 h-14 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center mx-auto mb-4">
             <Check className="w-8 h-8" />
           </div>
           <h1 className="text-2xl font-bold text-gray-800 mb-2">Session terminee</h1>
@@ -303,7 +334,7 @@ export default function ReviewPage({ user }: ReviewPageProps) {
           </p>
           <button
             onClick={resetReview}
-            className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold flex items-center justify-center gap-2"
+            className="w-full py-3 app-primary rounded-lg font-semibold flex items-center justify-center gap-2"
           >
             <RotateCcw className="w-5 h-5" />
             <span>Nouvelle session</span>
@@ -314,7 +345,7 @@ export default function ReviewPage({ user }: ReviewPageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-4 pb-24 px-4">
+    <div className="min-h-screen app-shell pt-4 pb-24 px-4">
       <h1 className="text-2xl font-bold text-gray-800 mb-2">Revision</h1>
       <p className="text-sm text-gray-500 mb-6">
         Choisis un ou plusieurs paquets. Les cartes dues seront melangees.
@@ -334,8 +365,8 @@ export default function ReviewPage({ user }: ReviewPageProps) {
               <button
                 key={deck.id}
                 onClick={() => toggleDeck(deck.id)}
-                className={`w-full p-4 rounded-lg border-2 bg-white text-left transition-all ${
-                  isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                className={`w-full p-4 rounded-lg border-2 bg-white/90 text-left transition-all ${
+                  isSelected ? 'border-violet-500 bg-violet-50' : 'border-gray-200'
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -347,7 +378,7 @@ export default function ReviewPage({ user }: ReviewPageProps) {
                   </div>
                   <span
                     className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                      isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
+                      isSelected ? 'bg-violet-600 border-violet-600' : 'border-gray-300'
                     }`}
                   >
                     {isSelected && <Check className="w-4 h-4 text-white" />}
@@ -365,7 +396,7 @@ export default function ReviewPage({ user }: ReviewPageProps) {
         className={`w-full py-4 rounded-lg font-semibold text-lg transition-all ${
           selectedCount === 0 || isLoading
             ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            : 'bg-green-600 text-white active:bg-green-700'
+            : 'app-primary active:brightness-95'
         }`}
       >
         {isLoading
@@ -385,6 +416,7 @@ export default function ReviewPage({ user }: ReviewPageProps) {
 function getNextSchedule(progress: ReviewProgress | null, rating: Rating) {
   const previousInterval = progress?.review_interval_days ?? 0;
   const previousStreak = progress?.review_streak ?? 0;
+  const reviewCount = (progress?.review_count ?? 0) + 1;
   const reviewedAt = new Date();
   const nextDueAt = new Date(reviewedAt);
 
@@ -424,6 +456,7 @@ function getNextSchedule(progress: ReviewProgress | null, rating: Rating) {
     review_due_at: nextDueAt.toISOString(),
     review_interval_days: nextIntervalDays,
     review_streak: nextStreak,
+    review_count: reviewCount,
   };
 }
 

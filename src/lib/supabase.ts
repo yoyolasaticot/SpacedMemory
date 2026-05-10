@@ -37,5 +37,6 @@ export interface ReviewProgress {
   review_due_at: string | null;
   review_interval_days: number;
   review_streak: number;
+  review_count: number;
   last_reviewed_at: string | null;
 }

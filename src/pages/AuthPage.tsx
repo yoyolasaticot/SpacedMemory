@@ -44,9 +44,9 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center px-4">
-      <div className="w-full max-w-md mx-auto bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-        <div className="w-14 h-14 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center mb-4">
+    <div className="min-h-screen app-shell flex items-center px-4">
+      <div className="w-full max-w-md mx-auto app-panel rounded-lg p-6">
+        <div className="w-14 h-14 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center mb-4">
           <Brain className="w-8 h-8" />
         </div>
 
@@ -63,7 +63,7 @@ export default function AuthPage() {
             onChange={(event) => setEmail(event.target.value)}
             type="email"
             placeholder="Email"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+            className="w-full px-4 py-3 border rounded-lg outline-none text-sm app-input"
           />
 
           <input
@@ -71,7 +71,7 @@ export default function AuthPage() {
             onChange={(event) => setPassword(event.target.value)}
             type="password"
             placeholder="Mot de passe"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+            className="w-full px-4 py-3 border rounded-lg outline-none text-sm app-input"
           />
 
           {!isSignIn && (
@@ -80,9 +80,9 @@ export default function AuthPage() {
               onChange={(event) => setConfirmPassword(event.target.value)}
               type="password"
               placeholder="Confirmer le mot de passe"
-              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm ${
+              className={`w-full px-4 py-3 border rounded-lg outline-none text-sm app-input ${
                 confirmPassword && !passwordsMatch
-                  ? 'border-red-400'
+                  ? 'app-input-error'
                   : 'border-gray-300'
               }`}
             />
@@ -94,7 +94,7 @@ export default function AuthPage() {
             className={`w-full py-3 rounded-lg font-semibold ${
               isLoading || !canSubmit
                 ? 'bg-gray-300 text-gray-500'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'app-primary'
             }`}
           >
             {isLoading ? 'Chargement...' : isSignIn ? 'Se connecter' : 'Creer le compte'}
@@ -111,7 +111,7 @@ export default function AuthPage() {
             setMessage('');
             setConfirmPassword('');
           }}
-          className="mt-6 w-full text-sm text-blue-600 font-medium"
+          className="mt-6 w-full text-sm text-violet-700 font-medium"
         >
           {isSignIn ? 'Creer un compte' : 'J ai deja un compte'}
         </button>
