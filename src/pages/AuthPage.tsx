@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Brain } from 'lucide-react';
+import { Brain, Sparkles } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 type AuthMode = 'sign-in' | 'sign-up';
@@ -45,14 +45,27 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen app-shell flex items-center px-4">
-      <div className="w-full max-w-md mx-auto app-panel rounded-lg p-6">
-        <div className="w-14 h-14 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center mb-4">
-          <Brain className="w-8 h-8" />
+      <div className="w-full max-w-md mx-auto app-panel rounded-2xl p-6">
+        <div className="mission-strip p-5 mb-6">
+          <div className="relative z-10 flex items-center gap-3">
+            <div className="w-14 h-14 rounded-2xl bg-white/18 text-white flex items-center justify-center pulse-badge">
+              <Brain className="w-8 h-8" />
+            </div>
+            <div>
+              <div className="flex items-center gap-1 text-xs font-bold uppercase tracking-[0.18em] text-white/75">
+                <Sparkles className="w-3.5 h-3.5" />
+                Memoire en orbite
+              </div>
+              <h1 className="text-3xl font-black leading-tight">
+                Spaced Memory
+              </h1>
+            </div>
+          </div>
         </div>
 
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">
           {isSignIn ? 'Connexion' : 'Creer un compte'}
-        </h1>
+        </h2>
         <p className="text-sm text-gray-500 mb-6">
           Connecte-toi pour retrouver tes paquets personnels et acceder aux paquets publics.
         </p>

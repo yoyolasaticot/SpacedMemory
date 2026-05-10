@@ -103,13 +103,16 @@ function App() {
   return (
     <div className="min-h-screen app-shell pb-20">
       <div className="app-topbar flex justify-between items-center">
-        <div className="text-xs text-slate-500 truncate pr-3">
-          {profile.email || user.email}
-          {profile.role === 'admin' && (
-            <span className="ml-2 px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 font-semibold">
-              Admin
-            </span>
-          )}
+        <div className="min-w-0 pr-3">
+          <div className="text-sm font-black brand-title leading-tight">Spaced Memory</div>
+          <div className="text-xs text-slate-500 truncate">
+            {profile.email || user.email}
+            {profile.role === 'admin' && (
+              <span className="ml-2 px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 font-semibold">
+                Admin
+              </span>
+            )}
+          </div>
         </div>
         <button
           onClick={() => supabase.auth.signOut()}

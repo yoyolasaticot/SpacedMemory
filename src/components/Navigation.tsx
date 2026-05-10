@@ -17,7 +17,11 @@ export default function Navigation({ currentPage, onNavigate }: NavigationProps)
               : 'app-nav-item'
           }`}
         >
-          <BookOpen className="w-6 h-6 mb-1" />
+          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center mb-1 ${
+            currentPage === 'creator' ? 'bg-violet-100' : 'bg-transparent'
+          }`}>
+            <BookOpen className="w-6 h-6" />
+          </div>
           <span className="text-xs font-medium">Créer</span>
         </button>
 
@@ -29,7 +33,11 @@ export default function Navigation({ currentPage, onNavigate }: NavigationProps)
               : 'app-nav-item'
           }`}
         >
-          <Play className="w-6 h-6 mb-1" />
+          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center mb-1 ${
+            currentPage === 'game' ? 'bg-teal-100' : 'bg-transparent'
+          }`}>
+            <Play className="w-6 h-6" />
+          </div>
           <span className="text-xs font-medium">Jouer</span>
         </button>
 
@@ -41,7 +49,11 @@ export default function Navigation({ currentPage, onNavigate }: NavigationProps)
               : 'app-nav-item'
           }`}
         >
-          <Brain className="w-6 h-6 mb-1" />
+          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center mb-1 ${
+            currentPage === 'review' ? 'bg-amber-100' : 'bg-transparent'
+          }`}>
+            <Brain className="w-6 h-6" />
+          </div>
           <span className="text-xs font-medium">Reviser</span>
         </button>
       </div>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { User } from '@supabase/supabase-js';
-import { Check, ChevronLeft, RotateCcw } from 'lucide-react';
+import { Check, ChevronLeft, Orbit, RotateCcw, Sparkles } from 'lucide-react';
 import { supabase, Deck, Flashcard, ReviewProgress } from '../lib/supabase';
 
 type ReviewView = 'select' | 'review' | 'done';
@@ -265,7 +265,7 @@ export default function ReviewPage({ user }: ReviewPageProps) {
 
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">Revision</h1>
+            <h1 className="text-2xl font-black brand-title">Revision</h1>
             <p className="text-sm text-gray-500">{currentDeckName}</p>
           </div>
           <div className="text-sm font-semibold text-gray-600">
@@ -282,9 +282,9 @@ export default function ReviewPage({ user }: ReviewPageProps) {
 
         <button
           onClick={() => setShowAnswer(true)}
-          className="w-full min-h-[320px] app-panel rounded-lg p-6 flex flex-col justify-center text-center"
+          className="w-full min-h-[320px] app-panel rounded-2xl p-6 flex flex-col justify-center text-center"
         >
-          <div className="text-xs font-semibold text-gray-400 mb-4">
+          <div className="text-xs font-black text-violet-500 mb-4 tracking-[0.22em]">
             {showAnswer ? 'REPONSE' : 'QUESTION'}
           </div>
           <p className="text-2xl font-bold text-gray-900 leading-relaxed break-words">
@@ -324,11 +324,11 @@ export default function ReviewPage({ user }: ReviewPageProps) {
   if (view === 'done') {
     return (
       <div className="min-h-screen app-shell pt-10 pb-24 px-4 flex items-center">
-        <div className="w-full app-panel rounded-lg p-6 text-center">
-          <div className="w-14 h-14 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center mx-auto mb-4">
+        <div className="w-full app-panel rounded-2xl p-6 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-teal-100 text-teal-700 flex items-center justify-center mx-auto mb-4">
             <Check className="w-8 h-8" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Session terminee</h1>
+          <h1 className="text-2xl font-black brand-title mb-2">Session terminee</h1>
           <p className="text-gray-600 mb-6">
             Les cartes ont ete replanifiees selon tes reponses.
           </p>
@@ -346,10 +346,18 @@ export default function ReviewPage({ user }: ReviewPageProps) {
 
   return (
     <div className="min-h-screen app-shell pt-4 pb-24 px-4">
-      <h1 className="text-2xl font-bold text-gray-800 mb-2">Revision</h1>
-      <p className="text-sm text-gray-500 mb-6">
-        Choisis un ou plusieurs paquets. Les cartes dues seront melangees.
-      </p>
+      <div className="mission-strip p-5 mb-6">
+        <div className="relative z-10">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-white/75 mb-2">
+            <Orbit className="w-4 h-4" />
+            Revision espacee
+          </div>
+          <h1 className="text-3xl font-black leading-tight">Lance ta session</h1>
+          <p className="text-sm text-white/78 mt-2">
+            Les cartes dues sont melangees pour garder le cerveau en mouvement.
+          </p>
+        </div>
+      </div>
 
       {decks.length === 0 ? (
         <p className="text-center text-gray-500 py-8">
@@ -365,14 +373,15 @@ export default function ReviewPage({ user }: ReviewPageProps) {
               <button
                 key={deck.id}
                 onClick={() => toggleDeck(deck.id)}
-                className={`w-full p-4 rounded-lg border-2 bg-white/90 text-left transition-all ${
-                  isSelected ? 'border-violet-500 bg-violet-50' : 'border-gray-200'
+                className={`w-full p-4 rounded-2xl text-left transition-all launch-card ${
+                  isSelected ? 'ring-2 ring-violet-400' : ''
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="font-medium text-gray-800">{deck.name}</span>
                     <div className="text-xs text-gray-500 mt-1">
+                      <Sparkles className="inline w-3 h-3 mr-1 text-amber-500" />
                       {dueCount} carte{dueCount > 1 ? 's' : ''} a reviser
                     </div>
                   </div>

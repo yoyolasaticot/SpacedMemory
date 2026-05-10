@@ -1,20 +1,20 @@
 import { useState, useEffect } from 'react';
 import { User } from '@supabase/supabase-js';
-import { ChevronLeft, X } from 'lucide-react';
+import { ChevronLeft, Orbit, Sparkles, X } from 'lucide-react';
 import { supabase, Deck, Flashcard, Profile } from '../lib/supabase';
 
 const COLOR_OPTIONS = [
-  '#3B82F6', // Blue
-  '#ce3636', // Red
-  '#10B981', // Green
-  '#FBBF24', // Yellow
-  '#F59E0B', // Amber
-  '#8B5CF6', // Purple
-  '#EC4899', // Pink
-  '#06B6D4', // Cyan
-  '#6366F1', // Indigo
-  '#14B8A6', // Teal
-  '#F97316', // Orange
+  '#2F7BFF',
+  '#7C3CFF',
+  '#14D4BF',
+  '#FFBD3D',
+  '#FF4F7B',
+  '#F97316',
+  '#22C55E',
+  '#06B6D4',
+  '#A855F7',
+  '#0F766E',
+  '#E11D48',
 ];
 
 const UNSET_COLOR = 'UNSET';
@@ -245,7 +245,18 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
             <span>Retour</span>
           </button>
 
-          <h1 className="text-2xl font-bold text-gray-800 mb-6">Mode Jeu</h1>
+          <div className="mission-strip p-5 mb-6">
+            <div className="relative z-10">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-white/75 mb-2">
+                <Sparkles className="w-4 h-4" />
+                Mode Jeu
+              </div>
+              <h1 className="text-3xl font-black leading-tight">Choisis une pile</h1>
+              <p className="text-sm text-white/78 mt-2">
+                Les paquets de meme couleur partagent la meme trajectoire.
+              </p>
+            </div>
+          </div>
 
           {currentCard ? (
             <div className="flex flex-col gap-6">
@@ -259,7 +270,7 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
                     setIsFlipped(false);
                   }
                 }}
-                className="cursor-pointer rounded-2xl overflow-hidden shadow-xl"
+                className="cursor-pointer rounded-[1.5rem] overflow-hidden memory-card"
                 style={{
                   borderWidth: '20px',
                   borderColor:
@@ -275,10 +286,10 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
                   }}
                 >
                   <div className="text-center">
-                    <div className="text-xs font-semibold text-white mb-3 opacity-75">
+                    <div className="text-xs font-black text-white mb-3 opacity-75 tracking-[0.22em]">
                       {isFlipped ? 'RÉPONSE' : 'QUESTION'}
                     </div>
-                    <p className="text-2xl font-bold text-white leading-relaxed break-words">
+                    <p className="text-3xl font-black text-white leading-relaxed break-words">
                       {isFlipped ? currentCard.answer : currentCard.question}
                     </p>
                   </div>
@@ -330,7 +341,7 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
                       <div className="absolute inset-0 translate-x-1 translate-y-1 rounded-2xl bg-teal-100 opacity-70" />
 
                       <div
-                        className="relative p-5 rounded-2xl shadow-xl text-white min-h-[300px] flex flex-col justify-center items-center border border-white/20"
+                        className="relative p-5 rounded-[1.5rem] memory-card text-white min-h-[300px] flex flex-col justify-center items-center border border-white/30"
                         style={{ backgroundColor: pile.color }}
                       >
                         <div className="font-bold text-4xl text-center leading-snug break-words">
@@ -338,6 +349,7 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
                         </div>
 
                         <div className="absolute bottom-3 text-sm opacity-90">
+                          <Orbit className="inline w-4 h-4 mr-1" />
                           {remainingCount}/{totalCount} carte{totalCount > 1 ? 's' : ''} restante{remainingCount > 1 ? 's' : ''}
                         </div>
                       </div>
@@ -454,7 +466,18 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
     return (
       <div className="min-h-screen app-shell pt-4 pb-24">
         <div className="px-4">
-          <h1 className="text-2xl font-bold text-gray-800 mb-6">Sélectionner les paquets</h1>
+          <div className="mission-strip p-5 mb-6">
+            <div className="relative z-10">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-white/75 mb-2">
+                <Orbit className="w-4 h-4" />
+                Composer une partie
+              </div>
+              <h1 className="text-3xl font-black leading-tight">Assemble tes orbites</h1>
+              <p className="text-sm text-white/78 mt-2">
+                Une couleur peut regrouper plusieurs paquets dans une seule pile.
+              </p>
+            </div>
+          </div>
 
           {decks.length === 0 ? (
             <p className="text-center text-gray-500 py-8">
@@ -467,10 +490,10 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
                   <button
                     key={deck.id}
                     onClick={() => toggleDeckSelection(deck.id)}
-                    className={`w-full p-4 rounded-lg border-2 text-left transition-all ${
+                    className={`w-full p-4 rounded-2xl text-left transition-all launch-card ${
                       selectedDecksWithColor.has(deck.id)
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 bg-white/90'
+                        ? 'ring-2 ring-violet-400'
+                        : ''
                     }`}
                   >
                     <div className="flex items-center justify-between">

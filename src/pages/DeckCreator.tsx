@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User } from '@supabase/supabase-js';
-import { Plus } from 'lucide-react';
+import { Orbit, Plus, Sparkles } from 'lucide-react';
 import { supabase, Deck, Flashcard, Profile } from '../lib/supabase';
 
 
@@ -215,7 +215,18 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
           ← Retour
         </button>
 
-        <h2 className="text-xl font-bold mb-4">{selectedDeck.name}</h2>
+        <div className="mission-strip p-5 mb-6">
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-white/75 mb-2">
+              <Sparkles className="w-4 h-4" />
+              Fabrique de cartes
+            </div>
+            <h2 className="text-3xl font-black leading-tight">{selectedDeck.name}</h2>
+            <p className="text-sm text-white/78 mt-2">
+              Ajoute des questions courtes, nettes, pretes a revenir au bon moment.
+            </p>
+          </div>
+        </div>
 
         <div className="space-y-3 mb-6">
   <input
@@ -418,7 +429,18 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
 
   return (
     <div className="p-4 min-h-screen app-shell">
-      <h2 className="text-xl font-bold mb-4">Paquets</h2>
+      <div className="mission-strip p-5 mb-6">
+        <div className="relative z-10">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-white/75 mb-2">
+            <Orbit className="w-4 h-4" />
+            Bibliotheque
+          </div>
+          <h2 className="text-3xl font-black leading-tight">Tes constellations</h2>
+          <p className="text-sm text-white/78 mt-2">
+            Chaque paquet devient une route de revision claire et motivante.
+          </p>
+        </div>
+      </div>
 
       <input
         value={newDeckName}
