@@ -5,6 +5,17 @@ import { supabase, Deck, Flashcard, ReviewProgress } from '../lib/supabase';
 
 type ReviewView = 'select' | 'review' | 'done';
 type Rating = 'again' | 'hard' | 'good' | 'easy';
+type ReviewState = 'new' | 'learning' | 'review' | 'relearning';
+
+const INITIAL_EASE_FACTOR = 2.5;
+const MIN_EASE_FACTOR = 1.3;
+const LEARNING_STEPS_MINUTES = [1, 10];
+const RELEARNING_STEPS_MINUTES = [10];
+const GRADUATING_INTERVAL_DAYS = 1;
+const EASY_INTERVAL_DAYS = 4;
+const HARD_INTERVAL_FACTOR = 1.2;
+const EASY_BONUS = 1.3;
+const MAX_INTERVAL_DAYS = 36500;
 
 const REVIEW_OPTIONS: Array<{
   rating: Rating;
@@ -15,25 +26,25 @@ const REVIEW_OPTIONS: Array<{
   {
     rating: 'again',
     label: 'Rate',
-    detail: 'Prochaine session',
+    detail: 'Dans 1 min',
     className: 'bg-rose-600 hover:bg-rose-700',
   },
   {
     rating: 'hard',
     label: 'Difficile',
-    detail: 'Dans 6 heures',
+    detail: 'Intervalle court',
     className: 'bg-orange-600 hover:bg-orange-700',
   },
   {
     rating: 'good',
     label: 'Correct',
-    detail: 'Demain',
+    detail: 'Valider',
     className: 'bg-violet-600 hover:bg-violet-700',
   },
   {
     rating: 'easy',
     label: 'Facile',
-    detail: 'Dans 2 jours',
+    detail: 'Avancer',
     className: 'bg-teal-600 hover:bg-teal-700',
   },
 ];
@@ -528,50 +539,327 @@ export default function ReviewPage({ user }: ReviewPageProps) {
 }
 
 function getNextSchedule(progress: ReviewProgress | null, rating: Rating) {
-  const previousInterval = progress?.review_interval_days ?? 0;
+  const previousInterval = Math.max(0, progress?.review_interval_days ?? 0);
   const previousStreak = progress?.review_streak ?? 0;
   const reviewCount = (progress?.review_count ?? 0) + 1;
+  const previousState: ReviewState = progress?.review_state ?? 'new';
+  const previousStep = progress?.learning_step ?? 0;
+  const previousEase = Number(progress?.ease_factor ?? INITIAL_EASE_FACTOR);
+  const previousLapses = progress?.lapse_count ?? 0;
   const reviewedAt = new Date();
-  const nextDueAt = new Date(reviewedAt);
-
-  let nextIntervalDays = 1;
-  let nextStreak = 0;
-
-  if (rating === 'again') {
-    nextIntervalDays = 0;
-    nextStreak = 0;
-    nextDueAt.setTime(reviewedAt.getTime());
-  }
-
-  if (rating === 'hard') {
-    nextIntervalDays = 0;
-    nextStreak = 0;
-    nextDueAt.setHours(nextDueAt.getHours() + 6);
-  }
-
-  if (rating === 'good') {
-    nextStreak = Math.max(1, previousStreak);
-    nextIntervalDays = previousInterval <= 1
-      ? 1
-      : Math.min(90, Math.ceil(previousInterval * 1.7));
-    nextDueAt.setDate(nextDueAt.getDate() + nextIntervalDays);
-  }
-
-  if (rating === 'easy') {
-    nextStreak = previousStreak + 1;
-    nextIntervalDays = previousInterval <= 1
-      ? 2
-      : Math.min(180, Math.ceil(previousInterval * (1.9 + nextStreak * 0.2)));
-    nextDueAt.setDate(nextDueAt.getDate() + nextIntervalDays);
-  }
+  const schedule = scheduleAnkiStyle({
+    rating,
+    reviewedAt,
+    previousState,
+    previousStep,
+    previousInterval,
+    previousStreak,
+    previousEase,
+    previousLapses,
+  });
 
   return {
     last_reviewed_at: reviewedAt.toISOString(),
-    review_due_at: nextDueAt.toISOString(),
-    review_interval_days: nextIntervalDays,
-    review_streak: nextStreak,
+    review_due_at: schedule.nextDueAt.toISOString(),
+    review_interval_days: schedule.intervalDays,
+    review_streak: schedule.streak,
     review_count: reviewCount,
+    review_state: schedule.state,
+    learning_step: schedule.learningStep,
+    ease_factor: schedule.easeFactor,
+    lapse_count: schedule.lapseCount,
   };
+}
+
+function scheduleAnkiStyle({
+  rating,
+  reviewedAt,
+  previousState,
+  previousStep,
+  previousInterval,
+  previousStreak,
+  previousEase,
+  previousLapses,
+}: {
+  rating: Rating;
+  reviewedAt: Date;
+  previousState: ReviewState;
+  previousStep: number;
+  previousInterval: number;
+  previousStreak: number;
+  previousEase: number;
+  previousLapses: number;
+}) {
+  if (previousState === 'new' || previousState === 'learning') {
+    return scheduleLearningCard({
+      rating,
+      reviewedAt,
+      previousStep,
+      easeFactor: previousEase,
+      lapseCount: previousLapses,
+    });
+  }
+
+  if (previousState === 'relearning') {
+    return scheduleRelearningCard({
+      rating,
+      reviewedAt,
+      previousInterval,
+      previousStreak,
+      easeFactor: previousEase,
+      lapseCount: previousLapses,
+    });
+  }
+
+  return scheduleReviewCard({
+    rating,
+    reviewedAt,
+    previousInterval,
+    previousStreak,
+    easeFactor: previousEase,
+    lapseCount: previousLapses,
+  });
+}
+
+function scheduleLearningCard({
+  rating,
+  reviewedAt,
+  previousStep,
+  easeFactor,
+  lapseCount,
+}: {
+  rating: Rating;
+  reviewedAt: Date;
+  previousStep: number;
+  easeFactor: number;
+  lapseCount: number;
+}) {
+  if (rating === 'again') {
+    return buildSchedule({
+      reviewedAt,
+      delayMinutes: LEARNING_STEPS_MINUTES[0],
+      state: 'learning',
+      learningStep: 0,
+      intervalDays: 0,
+      streak: 0,
+      easeFactor,
+      lapseCount,
+    });
+  }
+
+  if (rating === 'hard') {
+    return buildSchedule({
+      reviewedAt,
+      delayMinutes: 6,
+      state: 'learning',
+      learningStep: Math.max(0, previousStep),
+      intervalDays: 0,
+      streak: 0,
+      easeFactor: clampEase(easeFactor - 0.15),
+      lapseCount,
+    });
+  }
+
+  if (rating === 'good' && previousStep < LEARNING_STEPS_MINUTES.length - 1) {
+    const nextStep = previousStep + 1;
+    return buildSchedule({
+      reviewedAt,
+      delayMinutes: LEARNING_STEPS_MINUTES[nextStep],
+      state: 'learning',
+      learningStep: nextStep,
+      intervalDays: 0,
+      streak: 0,
+      easeFactor,
+      lapseCount,
+    });
+  }
+
+  if (rating === 'easy') {
+    return buildSchedule({
+      reviewedAt,
+      delayDays: EASY_INTERVAL_DAYS,
+      state: 'review',
+      learningStep: 0,
+      intervalDays: EASY_INTERVAL_DAYS,
+      streak: 1,
+      easeFactor: clampEase(easeFactor + 0.15),
+      lapseCount,
+    });
+  }
+
+  return buildSchedule({
+    reviewedAt,
+    delayDays: GRADUATING_INTERVAL_DAYS,
+    state: 'review',
+    learningStep: 0,
+    intervalDays: GRADUATING_INTERVAL_DAYS,
+    streak: 1,
+    easeFactor,
+    lapseCount,
+  });
+}
+
+function scheduleReviewCard({
+  rating,
+  reviewedAt,
+  previousInterval,
+  previousStreak,
+  easeFactor,
+  lapseCount,
+}: {
+  rating: Rating;
+  reviewedAt: Date;
+  previousInterval: number;
+  previousStreak: number;
+  easeFactor: number;
+  lapseCount: number;
+}) {
+  const baseInterval = Math.max(1, previousInterval);
+
+  if (rating === 'again') {
+    return buildSchedule({
+      reviewedAt,
+      delayMinutes: RELEARNING_STEPS_MINUTES[0],
+      state: 'relearning',
+      learningStep: 0,
+      intervalDays: Math.max(1, Math.floor(baseInterval * 0.5)),
+      streak: 0,
+      easeFactor: clampEase(easeFactor - 0.2),
+      lapseCount: lapseCount + 1,
+    });
+  }
+
+  if (rating === 'hard') {
+    const intervalDays = clampInterval(Math.ceil(baseInterval * HARD_INTERVAL_FACTOR));
+    return buildSchedule({
+      reviewedAt,
+      delayDays: intervalDays,
+      state: 'review',
+      learningStep: 0,
+      intervalDays,
+      streak: previousStreak + 1,
+      easeFactor: clampEase(easeFactor - 0.15),
+      lapseCount,
+    });
+  }
+
+  if (rating === 'easy') {
+    const intervalDays = clampInterval(Math.ceil(baseInterval * easeFactor * EASY_BONUS));
+    return buildSchedule({
+      reviewedAt,
+      delayDays: intervalDays,
+      state: 'review',
+      learningStep: 0,
+      intervalDays,
+      streak: previousStreak + 1,
+      easeFactor: clampEase(easeFactor + 0.15),
+      lapseCount,
+    });
+  }
+
+  const intervalDays = clampInterval(Math.ceil(baseInterval * easeFactor));
+  return buildSchedule({
+    reviewedAt,
+    delayDays: intervalDays,
+    state: 'review',
+    learningStep: 0,
+    intervalDays,
+    streak: previousStreak + 1,
+    easeFactor,
+    lapseCount,
+  });
+}
+
+function scheduleRelearningCard({
+  rating,
+  reviewedAt,
+  previousInterval,
+  previousStreak,
+  easeFactor,
+  lapseCount,
+}: {
+  rating: Rating;
+  reviewedAt: Date;
+  previousInterval: number;
+  previousStreak: number;
+  easeFactor: number;
+  lapseCount: number;
+}) {
+  if (rating === 'again' || rating === 'hard') {
+    return buildSchedule({
+      reviewedAt,
+      delayMinutes: RELEARNING_STEPS_MINUTES[0],
+      state: 'relearning',
+      learningStep: 0,
+      intervalDays: Math.max(1, previousInterval),
+      streak: 0,
+      easeFactor: rating === 'hard' ? clampEase(easeFactor - 0.15) : easeFactor,
+      lapseCount,
+    });
+  }
+
+  const intervalDays = rating === 'easy'
+    ? clampInterval(Math.max(EASY_INTERVAL_DAYS, Math.ceil(Math.max(1, previousInterval) * easeFactor)))
+    : Math.max(GRADUATING_INTERVAL_DAYS, previousInterval);
+
+  return buildSchedule({
+    reviewedAt,
+    delayDays: intervalDays,
+    state: 'review',
+    learningStep: 0,
+    intervalDays,
+    streak: previousStreak + 1,
+    easeFactor: rating === 'easy' ? clampEase(easeFactor + 0.15) : easeFactor,
+    lapseCount,
+  });
+}
+
+function buildSchedule({
+  reviewedAt,
+  delayMinutes,
+  delayDays,
+  state,
+  learningStep,
+  intervalDays,
+  streak,
+  easeFactor,
+  lapseCount,
+}: {
+  reviewedAt: Date;
+  delayMinutes?: number;
+  delayDays?: number;
+  state: Exclude<ReviewState, 'new'>;
+  learningStep: number;
+  intervalDays: number;
+  streak: number;
+  easeFactor: number;
+  lapseCount: number;
+}) {
+  const nextDueAt = new Date(reviewedAt);
+
+  if (delayMinutes !== undefined) {
+    nextDueAt.setMinutes(nextDueAt.getMinutes() + delayMinutes);
+  } else {
+    nextDueAt.setDate(nextDueAt.getDate() + (delayDays ?? intervalDays));
+  }
+
+  return {
+    nextDueAt,
+    state,
+    learningStep,
+    intervalDays: clampInterval(intervalDays),
+    streak,
+    easeFactor: clampEase(easeFactor),
+    lapseCount,
+  };
+}
+
+function clampEase(easeFactor: number) {
+  return Math.max(MIN_EASE_FACTOR, Number(easeFactor.toFixed(2)));
+}
+
+function clampInterval(intervalDays: number) {
+  return Math.min(MAX_INTERVAL_DAYS, Math.max(0, intervalDays));
 }
 
 function isCardDue(progress: ReviewProgress | undefined, now: Date) {

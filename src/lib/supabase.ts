@@ -41,5 +41,9 @@ export interface ReviewProgress {
   review_interval_days: number;
   review_streak: number;
   review_count: number;
+  review_state: 'learning' | 'review' | 'relearning';
+  learning_step: number;
+  ease_factor: number;
+  lapse_count: number;
   last_reviewed_at: string | null;
 }
