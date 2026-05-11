@@ -19,6 +19,7 @@ interface DeckCreatorProps {
 
 export default function DeckCreator({ user, profile }: DeckCreatorProps) {
   const [decks, setDecks] = useState<Deck[]>([]);
+  const [quarantineCountsByDeck, setQuarantineCountsByDeck] = useState<Record<string, number>>({});
   const [selectedDeck, setSelectedDeck] = useState<Deck | null>(null);
   const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
   const [newDeckName, setNewDeckName] = useState('');
@@ -57,6 +58,24 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
     if (data) {
       setDecks(data.filter((deck) => canEditDeck(deck)));
     }
+
+    await loadQuarantineCounts();
+  };
+
+  const loadQuarantineCounts = async () => {
+    const { data } = await supabase
+      .from('flashcards')
+      .select('id, deck_id')
+      .eq('status', 'quarantine');
+
+    if (!data) return;
+
+    setQuarantineCountsByDeck(
+      data.reduce<Record<string, number>>((counts, card) => {
+        counts[card.deck_id] = (counts[card.deck_id] ?? 0) + 1;
+        return counts;
+      }, {})
+    );
   };
 
   const loadFlashcards = async (deckId: string) => {
@@ -127,10 +146,8 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
   };
 
   const deckHasQuarantine = (deckId: string) => {
-  return flashcards.some(
-    card => card.deck_id === deckId && card.status === 'quarantine'
-  );
-};
+    return (quarantineCountsByDeck[deckId] ?? 0) > 0;
+  };
 
   const createFlashcard = async () => {
     if (!selectedDeck) return;
@@ -165,14 +182,29 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
   const reactivateFlashcard = async (id: string) => {
     await supabase
       .from('flashcards')
-      .update({ status: 'active' })
+      .update({
+        status: 'active',
+        quarantine_note: null,
+        quarantined_by: null,
+        quarantined_at: null,
+      })
       .eq('id', id);
 
     setFlashcards(
       flashcards.map((f) =>
-        f.id === id ? { ...f, status: 'active' } : f
+        f.id === id
+          ? {
+              ...f,
+              status: 'active',
+              quarantine_note: null,
+              quarantined_by: null,
+              quarantined_at: null,
+            }
+          : f
       )
     );
+
+    loadQuarantineCounts();
   };
 
   const updateFlashcard = async () => {
@@ -288,7 +320,12 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
             <div className="text-sm text-gray-600">{card.answer}</div>
 
             {card.status === 'quarantine' && (
-              <div className="text-xs text-red-600">En quarantaine</div>
+              <div className="mt-2 rounded-lg border border-orange-200 bg-orange-50 p-2 text-xs text-orange-800">
+                <div className="font-semibold">En quarantaine</div>
+                {card.quarantine_note && (
+                  <div className="mt-1 text-orange-900">{card.quarantine_note}</div>
+                )}
+              </div>
             )}
 
             <div className="flex gap-2 mt-2">
@@ -489,7 +526,12 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
   </span>
 
   {deckHasQuarantine(deck.id) && (
-    <span className="text-yellow-500 text-base">☢</span>
+    <span
+      className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-orange-100 px-1.5 text-xs font-bold text-orange-700"
+      title="Cartes en quarantaine"
+    >
+      ⚠ {quarantineCountsByDeck[deck.id]}
+    </span>
   )}
 </button>
 

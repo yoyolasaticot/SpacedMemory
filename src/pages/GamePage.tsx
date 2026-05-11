@@ -33,7 +33,7 @@ interface GamePageProps {
   setIsGameInProgress: (value: boolean) => void;
 }
 
-export default function GamePage({ user, profile, setIsGameInProgress }: GamePageProps) {
+export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [selectedDecksWithColor, setSelectedDecksWithColor] = useState<Map<string, string>>(new Map());
   const [allFlashcards, setAllFlashcards] = useState<Flashcard[]>([]);
@@ -46,6 +46,8 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
   const [usedFlashcards, setUsedFlashcards] = useState<string[]>([]);
   const [confirmExitOpen, setConfirmExitOpen] = useState(false);
   const [confirmQuarantineOpen, setConfirmQuarantineOpen] = useState(false);
+  const [quarantineNote, setQuarantineNote] = useState('');
+  const [quarantineError, setQuarantineError] = useState('');
   const [allCardsDoneOpen, setAllCardsDoneOpen] = useState(false);
   const [finishedPileColor, setFinishedPileColor] = useState<string | null>(null);
 
@@ -85,12 +87,11 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
     selectedDecksWithColor.size > 0 &&
     Array.from(selectedDecksWithColor.values()).every(color => color !== UNSET_COLOR);
 
-  const canEditDeck = (deckId: string | null) => {
+  const canQuarantineDeck = (deckId: string | null) => {
     const deck = decks.find(item => item.id === deckId);
     if (!deck) return false;
 
-    return (deck.visibility === 'public' && profile.role === 'admin')
-      || (deck.visibility === 'personal' && deck.owner_id === user.id);
+    return deck.visibility === 'public' || deck.owner_id === user.id;
   };
 
   const startGame = async () => {
@@ -156,10 +157,16 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
   const quarantineCurrentCard = async () => {
     if (!currentCard) return;
 
-    const { error } = await supabase
-      .from('flashcards')
-      .update({ status: 'quarantine' })
-      .eq('id', currentCard.id);
+    const note = quarantineNote.trim();
+    if (!note) {
+      setQuarantineError('Ajoute une note pour expliquer le signalement.');
+      return;
+    }
+
+    const { error } = await supabase.rpc('quarantine_flashcard_for_review', {
+      target_flashcard_id: currentCard.id,
+      note,
+    });
 
     if (!error) {
       setAllFlashcards((prev) =>
@@ -174,7 +181,12 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
       setCurrentCardDeckId(null);
       setIsFlipped(false);
       setConfirmQuarantineOpen(false);
+      setQuarantineNote('');
+      setQuarantineError('');
+      return;
     }
+
+    setQuarantineError("La carte n'a pas pu etre mise en quarantaine.");
   };
 
   const resetFinishedDeck = () => {
@@ -207,6 +219,8 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
     setIsGameInProgress(false);
     setConfirmExitOpen(false);
     setConfirmQuarantineOpen(false);
+    setQuarantineNote('');
+    setQuarantineError('');
     setAllCardsDoneOpen(false);
     setFinishedPileColor(null);
   };
@@ -298,9 +312,13 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
                   Appuyez une fois pour voir la réponse, puis une seconde fois pour revenir aux paquets
                 </p>
 
-                {canEditDeck(currentCardDeckId) && (
+                {canQuarantineDeck(currentCardDeckId) && (
                   <button
-                    onClick={() => setConfirmQuarantineOpen(true)}
+                    onClick={() => {
+                      setQuarantineNote('');
+                      setQuarantineError('');
+                      setConfirmQuarantineOpen(true);
+                    }}
                     className="w-full px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-medium"
                   >
                     Mettre cette carte en quarantaine
@@ -394,16 +412,40 @@ export default function GamePage({ user, profile, setIsGameInProgress }: GamePag
                 Cette carte sera retirée du mode jeu jusqu’à sa relecture et sa réactivation.
               </p>
 
+              <textarea
+                value={quarantineNote}
+                onChange={(event) => {
+                  setQuarantineNote(event.target.value);
+                  setQuarantineError('');
+                }}
+                placeholder="Pourquoi cette carte doit-elle etre relue ?"
+                maxLength={400}
+                className="w-full min-h-28 px-3 py-2 border rounded-lg outline-none text-sm app-input mb-2"
+              />
+
+              {quarantineError && (
+                <p className="text-xs text-red-600 mb-3">{quarantineError}</p>
+              )}
+
               <div className="flex gap-2">
                 <button
                   onClick={quarantineCurrentCard}
-                  className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg"
+                  disabled={!quarantineNote.trim()}
+                  className={`flex-1 px-4 py-2 rounded-lg ${
+                    quarantineNote.trim()
+                      ? 'bg-orange-600 text-white'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
                 >
                   Confirmer
                 </button>
 
                 <button
-                  onClick={() => setConfirmQuarantineOpen(false)}
+                  onClick={() => {
+                    setConfirmQuarantineOpen(false);
+                    setQuarantineNote('');
+                    setQuarantineError('');
+                  }}
                   className="flex-1 px-4 py-2 app-muted-button rounded-lg"
                 >
                   Annuler
