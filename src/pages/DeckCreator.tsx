@@ -161,6 +161,7 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
           answer: newAnswer,
           difficulty: newDifficulty,
           status: 'active',
+          created_by: user.id,
         },
       ])
       .select()

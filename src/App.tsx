@@ -9,6 +9,13 @@ import { Profile, supabase } from './lib/supabase';
 
 type Page = 'creator' | 'game' | 'review';
 
+interface QuarantineNotification {
+  id: string;
+  question: string;
+  quarantine_note: string | null;
+  quarantined_at: string | null;
+}
+
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('creator');
   const [isGameInProgress, setIsGameInProgress] = useState(false);
@@ -17,6 +24,8 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [quarantineNotifications, setQuarantineNotifications] = useState<QuarantineNotification[]>([]);
+  const [quarantineNoticeOpen, setQuarantineNoticeOpen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -27,6 +36,8 @@ function App() {
         loadProfile(sessionUser.id);
       } else {
         setProfile(null);
+        setQuarantineNotifications([]);
+        setQuarantineNoticeOpen(false);
         setIsAuthLoading(false);
       }
     });
@@ -40,6 +51,8 @@ function App() {
         loadProfile(sessionUser.id);
       } else {
         setProfile(null);
+        setQuarantineNotifications([]);
+        setQuarantineNoticeOpen(false);
         setIsAuthLoading(false);
       }
     });
@@ -58,6 +71,25 @@ function App() {
 
     setProfile(data);
     setIsAuthLoading(false);
+    loadQuarantineNotifications(userId);
+  };
+
+  const loadQuarantineNotifications = async (userId: string) => {
+    const { data } = await supabase
+      .from('flashcards')
+      .select('id, question, quarantine_note, quarantined_at')
+      .eq('created_by', userId)
+      .eq('status', 'quarantine')
+      .order('quarantined_at', { ascending: false });
+
+    if (data && data.length > 0) {
+      setQuarantineNotifications(data);
+      setQuarantineNoticeOpen(true);
+      return;
+    }
+
+    setQuarantineNotifications([]);
+    setQuarantineNoticeOpen(false);
   };
 
   const handleNavigate = (page: Page) => {
@@ -156,6 +188,56 @@ function App() {
                 className="flex-1 px-4 py-2 app-muted-button rounded-lg transition-colors"
               >
                 Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {quarantineNoticeOpen && quarantineNotifications.length > 0 && (
+        <div className="fixed inset-0 bg-slate-950/50 flex items-center justify-center z-50 p-4">
+          <div className="app-panel rounded-lg p-6 w-full max-w-sm">
+            <h3 className="text-lg font-bold text-gray-800 mb-2">
+              Carte en quarantaine
+            </h3>
+
+            <p className="text-sm text-gray-600 mb-4">
+              {quarantineNotifications.length === 1
+                ? 'Une de tes cartes doit etre relue.'
+                : `${quarantineNotifications.length} de tes cartes doivent etre relues.`}
+            </p>
+
+            <div className="space-y-2 max-h-64 overflow-auto mb-5">
+              {quarantineNotifications.slice(0, 5).map((item) => (
+                <div key={item.id} className="rounded-lg border border-orange-200 bg-orange-50 p-3">
+                  <div className="text-sm font-semibold text-gray-900 break-words">
+                    {item.question}
+                  </div>
+                  {item.quarantine_note && (
+                    <div className="mt-1 text-xs text-orange-900 break-words">
+                      {item.quarantine_note}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setCurrentPage('creator');
+                  setQuarantineNoticeOpen(false);
+                }}
+                className="flex-1 px-4 py-2 app-primary rounded-lg"
+              >
+                Voir
+              </button>
+
+              <button
+                onClick={() => setQuarantineNoticeOpen(false)}
+                className="flex-1 px-4 py-2 app-muted-button rounded-lg"
+              >
+                Fermer
               </button>
             </div>
           </div>

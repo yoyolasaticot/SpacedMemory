@@ -28,6 +28,7 @@ export interface Flashcard {
   answer: string;
   difficulty: number;
   status: 'active' | 'quarantine';
+  created_by: string | null;
   quarantine_note: string | null;
   quarantined_by: string | null;
   quarantined_at: string | null;
