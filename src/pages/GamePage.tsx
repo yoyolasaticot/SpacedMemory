@@ -186,7 +186,8 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
       return;
     }
 
-    setQuarantineError("La carte n'a pas pu etre mise en quarantaine.");
+    console.error('Quarantine failed', error);
+    setQuarantineError(getQuarantineErrorMessage(error.message));
   };
 
   const resetFinishedDeck = () => {
@@ -653,4 +654,28 @@ function adjustBrightness(color: string, percent: number): string {
   return '#' + (0x1000000 + (R < 255 ? (R < 1 ? 0 : R) : 255) * 0x10000 +
     (G < 255 ? (G < 1 ? 0 : G) : 255) * 0x100 + (B < 255 ? (B < 1 ? 0 : B) : 255))
     .toString(16).slice(1);
+}
+
+function getQuarantineErrorMessage(message: string) {
+  if (message.includes('quarantine_flashcard_for_review')) {
+    return "La migration de quarantaine n'a pas encore ete appliquee dans Supabase.";
+  }
+
+  if (message.includes('quarantine_note') || message.includes('quarantined_')) {
+    return "Les champs de quarantaine manquent dans Supabase. Applique la derniere migration.";
+  }
+
+  if (message.includes('Authentication required')) {
+    return 'Reconnecte-toi avant de signaler une carte.';
+  }
+
+  if (message.includes('A quarantine note is required')) {
+    return 'Ajoute une note pour expliquer le signalement.';
+  }
+
+  if (message.includes('Flashcard is not visible')) {
+    return "Cette carte n'est pas accessible avec ce compte.";
+  }
+
+  return "La carte n'a pas pu etre mise en quarantaine.";
 }

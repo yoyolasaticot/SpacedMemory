@@ -52,6 +52,9 @@ export default function ReviewPage({ user }: ReviewPageProps) {
   const [view, setView] = useState<ReviewView>('select');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [quarantineModalOpen, setQuarantineModalOpen] = useState(false);
+  const [quarantineNote, setQuarantineNote] = useState('');
+  const [quarantineError, setQuarantineError] = useState('');
 
   useEffect(() => {
     loadDecks();
@@ -193,6 +196,43 @@ export default function ReviewPage({ user }: ReviewPageProps) {
     setMessage('');
   };
 
+  const quarantineCurrentCard = async () => {
+    if (!currentCard) return;
+
+    const note = quarantineNote.trim();
+    if (!note) {
+      setQuarantineError('Ajoute une note pour expliquer le signalement.');
+      return;
+    }
+
+    const { error } = await supabase.rpc('quarantine_flashcard_for_review', {
+      target_flashcard_id: currentCard.id,
+      note,
+    });
+
+    if (error) {
+      console.error('Quarantine failed', error);
+      setQuarantineError(getQuarantineErrorMessage(error.message));
+      return;
+    }
+
+    const nextCards = cards.filter(card => card.id !== currentCard.id);
+    const nextIndex = Math.min(currentIndex, Math.max(0, nextCards.length - 1));
+
+    setCards(nextCards);
+    setCurrentIndex(nextIndex);
+    setShowAnswer(false);
+    setQuarantineModalOpen(false);
+    setQuarantineNote('');
+    setQuarantineError('');
+    setMessage('');
+    loadReviewCounts();
+
+    if (nextCards.length === 0) {
+      setView('done');
+    }
+  };
+
   const updateEarlyDifficulty = async (
     flashcard: Flashcard,
     rating: Rating,
@@ -249,6 +289,9 @@ export default function ReviewPage({ user }: ReviewPageProps) {
     setShowAnswer(false);
     setView('select');
     setMessage('');
+    setQuarantineModalOpen(false);
+    setQuarantineNote('');
+    setQuarantineError('');
     loadReviewCounts();
   };
 
@@ -300,22 +343,89 @@ export default function ReviewPage({ user }: ReviewPageProps) {
             Afficher la reponse
           </button>
         ) : (
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            {REVIEW_OPTIONS.map(option => (
-              <button
-                key={option.rating}
-                onClick={() => rateCurrentCard(option.rating)}
-                className={`p-3 rounded-lg text-white text-left transition-colors ${option.className}`}
-              >
-                <div className="font-bold">{option.label}</div>
-                <div className="text-xs opacity-90">{option.detail}</div>
-              </button>
-            ))}
+          <div className="mt-4 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              {REVIEW_OPTIONS.map(option => (
+                <button
+                  key={option.rating}
+                  onClick={() => rateCurrentCard(option.rating)}
+                  className={`p-3 rounded-lg text-white text-left transition-colors ${option.className}`}
+                >
+                  <div className="font-bold">{option.label}</div>
+                  <div className="text-xs opacity-90">{option.detail}</div>
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => {
+                setQuarantineNote('');
+                setQuarantineError('');
+                setQuarantineModalOpen(true);
+              }}
+              className="w-full py-3 bg-orange-600 text-white rounded-lg font-semibold"
+            >
+              Mettre en quarantaine
+            </button>
           </div>
         )}
 
         {message && (
           <p className="mt-4 text-sm text-red-600 text-center">{message}</p>
+        )}
+
+        {quarantineModalOpen && (
+          <div className="fixed inset-0 bg-slate-950/50 flex items-center justify-center z-50 p-4">
+            <div className="app-panel rounded-lg p-6 w-full max-w-sm">
+              <h3 className="text-lg font-bold text-gray-800 mb-4">
+                Mettre la carte en quarantaine ?
+              </h3>
+
+              <p className="text-sm text-gray-600 mb-4">
+                Elle sera retirée des révisions jusqu'à sa relecture par un admin.
+              </p>
+
+              <textarea
+                value={quarantineNote}
+                onChange={(event) => {
+                  setQuarantineNote(event.target.value);
+                  setQuarantineError('');
+                }}
+                placeholder="Pourquoi cette carte doit-elle etre relue ?"
+                maxLength={400}
+                className="w-full min-h-28 px-3 py-2 border rounded-lg outline-none text-sm app-input mb-2"
+              />
+
+              {quarantineError && (
+                <p className="text-xs text-red-600 mb-3">{quarantineError}</p>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={quarantineCurrentCard}
+                  disabled={!quarantineNote.trim()}
+                  className={`flex-1 px-4 py-2 rounded-lg ${
+                    quarantineNote.trim()
+                      ? 'bg-orange-600 text-white'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  Confirmer
+                </button>
+
+                <button
+                  onClick={() => {
+                    setQuarantineModalOpen(false);
+                    setQuarantineNote('');
+                    setQuarantineError('');
+                  }}
+                  className="flex-1 px-4 py-2 app-muted-button rounded-lg"
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     );
@@ -481,4 +591,28 @@ function shuffle<T>(items: T[]) {
   }
 
   return result;
+}
+
+function getQuarantineErrorMessage(message: string) {
+  if (message.includes('quarantine_flashcard_for_review')) {
+    return "La migration de quarantaine n'a pas encore ete appliquee dans Supabase.";
+  }
+
+  if (message.includes('quarantine_note') || message.includes('quarantined_')) {
+    return "Les champs de quarantaine manquent dans Supabase. Applique la derniere migration.";
+  }
+
+  if (message.includes('Authentication required')) {
+    return 'Reconnecte-toi avant de signaler une carte.';
+  }
+
+  if (message.includes('A quarantine note is required')) {
+    return 'Ajoute une note pour expliquer le signalement.';
+  }
+
+  if (message.includes('Flashcard is not visible')) {
+    return "Cette carte n'est pas accessible avec ce compte.";
+  }
+
+  return "La carte n'a pas pu etre mise en quarantaine.";
 }
