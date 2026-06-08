@@ -461,6 +461,13 @@ export default function DeckCreator({
             <div className="app-panel p-6 rounded w-full max-w-md">
               <h3 className="font-bold mb-4">Modifier la flashcard</h3>
 
+              {editingFlashcard.quarantine_note && (
+                <div className="mb-4 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900">
+                  <div className="font-semibold text-orange-800">Motif de quarantaine</div>
+                  <div className="mt-1 break-words">{editingFlashcard.quarantine_note}</div>
+                </div>
+              )}
+
               <input
                 value={editQuestion}
                 onChange={(e)=>setEditQuestion(e.target.value)}
