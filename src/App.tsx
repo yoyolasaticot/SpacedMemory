@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
 import Navigation from './components/Navigation';
 import DeckCreator from './pages/DeckCreator';
@@ -11,6 +11,7 @@ type Page = 'creator' | 'game' | 'review';
 
 interface QuarantineNotification {
   id: string;
+  deck_id: string;
   question: string;
   quarantine_note: string | null;
   quarantined_at: string | null;
@@ -26,6 +27,17 @@ function App() {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [quarantineNotifications, setQuarantineNotifications] = useState<QuarantineNotification[]>([]);
   const [quarantineNoticeOpen, setQuarantineNoticeOpen] = useState(false);
+  const [targetQuarantineCard, setTargetQuarantineCard] = useState<QuarantineNotification | null>(null);
+
+  const clearTargetQuarantineCard = useCallback(() => {
+    setTargetQuarantineCard(null);
+  }, []);
+
+  const viewQuarantineCard = (card: QuarantineNotification) => {
+    setTargetQuarantineCard(card);
+    setCurrentPage('creator');
+    setQuarantineNoticeOpen(false);
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -71,16 +83,21 @@ function App() {
 
     setProfile(data);
     setIsAuthLoading(false);
-    loadQuarantineNotifications(userId);
+    loadQuarantineNotifications(userId, data?.role);
   };
 
-  const loadQuarantineNotifications = async (userId: string) => {
-    const { data } = await supabase
+  const loadQuarantineNotifications = async (userId: string, role?: Profile['role']) => {
+    let query = supabase
       .from('flashcards')
-      .select('id, question, quarantine_note, quarantined_at')
-      .eq('created_by', userId)
+      .select('id, deck_id, question, quarantine_note, quarantined_at')
       .eq('status', 'quarantine')
       .order('quarantined_at', { ascending: false });
+
+    if (role !== 'admin') {
+      query = query.eq('created_by', userId);
+    }
+
+    const { data } = await query;
 
     if (data && data.length > 0) {
       setQuarantineNotifications(data);
@@ -156,7 +173,14 @@ function App() {
 
       <Navigation currentPage={currentPage} onNavigate={handleNavigate} />
 
-      {currentPage === 'creator' && <DeckCreator user={user} profile={profile} />}
+      {currentPage === 'creator' && (
+        <DeckCreator
+          user={user}
+          profile={profile}
+          targetQuarantineCard={targetQuarantineCard}
+          onTargetQuarantineCardHandled={clearTargetQuarantineCard}
+        />
+      )}
 
       {currentPage === 'game' && (
         <GamePage user={user} profile={profile} setIsGameInProgress={setIsGameInProgress} />
@@ -218,16 +242,19 @@ function App() {
                       {item.quarantine_note}
                     </div>
                   )}
+                  <button
+                    onClick={() => viewQuarantineCard(item)}
+                    className="mt-3 w-full px-3 py-2 text-xs font-semibold bg-orange-600 text-white rounded-lg"
+                  >
+                    Voir cette carte
+                  </button>
                 </div>
               ))}
             </div>
 
             <div className="flex gap-2">
               <button
-                onClick={() => {
-                  setCurrentPage('creator');
-                  setQuarantineNoticeOpen(false);
-                }}
+                onClick={() => viewQuarantineCard(quarantineNotifications[0])}
                 className="flex-1 px-4 py-2 app-primary rounded-lg"
               >
                 Voir

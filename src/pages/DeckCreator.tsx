@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { User } from '@supabase/supabase-js';
 import { Plus } from 'lucide-react';
 import { supabase, Deck, Flashcard, Profile } from '../lib/supabase';
@@ -15,13 +15,21 @@ const DIFFICULTY_COLORS = {
 interface DeckCreatorProps {
   user: User;
   profile: Profile;
+  targetQuarantineCard?: Pick<Flashcard, 'id' | 'deck_id'> | null;
+  onTargetQuarantineCardHandled?: () => void;
 }
 
-export default function DeckCreator({ user, profile }: DeckCreatorProps) {
+export default function DeckCreator({
+  user,
+  profile,
+  targetQuarantineCard,
+  onTargetQuarantineCardHandled,
+}: DeckCreatorProps) {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [quarantineCountsByDeck, setQuarantineCountsByDeck] = useState<Record<string, number>>({});
   const [selectedDeck, setSelectedDeck] = useState<Deck | null>(null);
   const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
+  const flashcardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [newDeckName, setNewDeckName] = useState('');
   const [newDeckVisibility, setNewDeckVisibility] = useState<'personal' | 'public'>('personal');
   const [newQuestion, setNewQuestion] = useState('');
@@ -38,16 +46,88 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
   const [editingDeck, setEditingDeck] = useState<string | null>(null);
   const [editDeckName, setEditDeckName] = useState('');
   const [deckToDelete, setDeckToDelete] = useState<Deck | null>(null);
+  const [highlightedFlashcardId, setHighlightedFlashcardId] = useState<string | null>(null);
 
   useEffect(() => {
     loadDecks();
   }, [profile.role, user.id]);
 
   const isAdmin = profile.role === 'admin';
+  const canManageSelectedDeck = selectedDeck ? canEditDeck(selectedDeck) : false;
 
   useEffect(() => {
     if (selectedDeck) loadFlashcards(selectedDeck.id);
   }, [selectedDeck]);
+
+  useEffect(() => {
+    if (!targetQuarantineCard) return;
+
+    const openTargetQuarantineCard = async () => {
+      const { data: card } = await supabase
+        .from('flashcards')
+        .select('*')
+        .eq('id', targetQuarantineCard.id)
+        .maybeSingle();
+
+      if (!card) {
+        onTargetQuarantineCardHandled?.();
+        return;
+      }
+
+      const deckFromList = decks.find(deck => deck.id === card.deck_id);
+      if (deckFromList) {
+        setSelectedDeck(deckFromList);
+        setView('cards');
+        return;
+      }
+
+      const { data: deck } = await supabase
+        .from('decks')
+        .select('*')
+        .eq('id', card.deck_id)
+        .maybeSingle();
+
+      if (deck) {
+        setSelectedDeck(deck);
+        setView('cards');
+        return;
+      }
+
+      onTargetQuarantineCardHandled?.();
+    };
+
+    openTargetQuarantineCard();
+  }, [decks, onTargetQuarantineCardHandled, targetQuarantineCard]);
+
+  useEffect(() => {
+    if (!targetQuarantineCard || view !== 'cards') return;
+
+    const targetCard = flashcards.find(card => card.id === targetQuarantineCard.id);
+    const targetElement = flashcardRefs.current[targetQuarantineCard.id];
+    if (!targetCard || !targetElement) return;
+
+    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlightedFlashcardId(targetQuarantineCard.id);
+
+    if (canManageSelectedDeck) {
+      setEditingFlashcard(targetCard);
+      setEditQuestion(targetCard.question);
+      setEditAnswer(targetCard.answer);
+      setEditDifficulty(targetCard.difficulty);
+    }
+
+    onTargetQuarantineCardHandled?.();
+  }, [canManageSelectedDeck, flashcards, onTargetQuarantineCardHandled, targetQuarantineCard, view]);
+
+  useEffect(() => {
+    if (!highlightedFlashcardId) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setHighlightedFlashcardId(null);
+    }, 3000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [highlightedFlashcardId]);
 
   const loadDecks = async () => {
     const { data } = await supabase
@@ -124,10 +204,10 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
     }
   };
 
-  const canEditDeck = (deck: Deck) => {
+  function canEditDeck(deck: Deck) {
     return (deck.visibility === 'public' && isAdmin)
       || (deck.visibility === 'personal' && deck.owner_id === user.id);
-  };
+  }
 
   const deleteDeck = async (id: string) => {
     const { error } = await supabase
@@ -254,7 +334,8 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
           </div>
         </div>
 
-        <div className="space-y-3 mb-6">
+        {canManageSelectedDeck ? (
+          <div className="space-y-3 mb-6">
   <input
     type="text"
     value={newQuestion}
@@ -303,12 +384,22 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
     <span>Ajouter</span>
   </button>
 </div>
+        ) : (
+          <div className="mb-6 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900">
+            Ce paquet est public. Tu peux voir la carte signalee, mais seul un admin peut la modifier ou la reactiver.
+          </div>
+        )}
 
         {flashcards.map((card) => (
           <div
             key={card.id}
-            className={`p-3 mb-2 app-card rounded border-l-4 ${
+            ref={(element) => {
+              flashcardRefs.current[card.id] = element;
+            }}
+            className={`p-3 mb-2 app-card rounded border-l-4 transition-all ${
               card.status === 'quarantine' ? 'opacity-60' : ''
+            } ${
+              highlightedFlashcardId === card.id ? 'ring-4 ring-orange-300 bg-orange-50' : ''
             }`}
             style={{
               borderLeftColor:
@@ -330,7 +421,7 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
             )}
 
             <div className="flex gap-2 mt-2">
-              {card.status === 'quarantine' && (
+              {canManageSelectedDeck && card.status === 'quarantine' && (
                 <button
                   onClick={() => reactivateFlashcard(card.id)}
                   className="px-2 py-1 text-xs bg-teal-600 text-white rounded"
@@ -339,24 +430,28 @@ export default function DeckCreator({ user, profile }: DeckCreatorProps) {
                 </button>
               )}
 
-              <button
-                onClick={() => {
-                  setEditingFlashcard(card);
-                  setEditQuestion(card.question);
-                  setEditAnswer(card.answer);
-                  setEditDifficulty(card.difficulty);
-                }}
-                className="px-2 py-1 text-xs bg-violet-600 text-white rounded"
-              >
-                Modifier
-              </button>
+              {canManageSelectedDeck && (
+                <button
+                  onClick={() => {
+                    setEditingFlashcard(card);
+                    setEditQuestion(card.question);
+                    setEditAnswer(card.answer);
+                    setEditDifficulty(card.difficulty);
+                  }}
+                  className="px-2 py-1 text-xs bg-violet-600 text-white rounded"
+                >
+                  Modifier
+                </button>
+              )}
 
-              <button
-                onClick={() => setFlashcardToDelete(card)}
-                className="px-2 py-1 text-xs bg-red-600 text-white rounded"
-                  >
-                    Supprimer
-              </button>
+              {canManageSelectedDeck && (
+                <button
+                  onClick={() => setFlashcardToDelete(card)}
+                  className="px-2 py-1 text-xs bg-red-600 text-white rounded"
+                    >
+                      Supprimer
+                </button>
+              )}
             </div>
           </div>
         ))}
