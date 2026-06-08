@@ -316,6 +316,13 @@ export default function DeckCreator({
     setEditingFlashcard(null);
   };
 
+  const reactivateEditingFlashcard = async () => {
+    if (!editingFlashcard) return;
+
+    await reactivateFlashcard(editingFlashcard.id);
+    setEditingFlashcard(null);
+  };
+
 
 
   if (view === 'cards' && selectedDeck) {
@@ -499,6 +506,15 @@ export default function DeckCreator({
 </div>
 
               <div className="flex gap-2">
+                {editingFlashcard.status === 'quarantine' && (
+                  <button
+                    onClick={reactivateEditingFlashcard}
+                    className="flex-1 bg-teal-600 text-white py-2 rounded"
+                  >
+                    Reactiver
+                  </button>
+                )}
+
                 <button
                   onClick={updateFlashcard}
                   className="flex-1 app-primary py-2 rounded"
