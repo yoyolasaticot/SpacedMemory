@@ -67,23 +67,17 @@ const BOARD_TILE_STYLES = {
   },
 };
 
-const HEX_DIRECTIONS = [
-  { q: 1, r: 0 },
-  { q: 1, r: -1 },
-  { q: 0, r: -1 },
-  { q: -1, r: 0 },
-  { q: -1, r: 1 },
-  { q: 0, r: 1 },
-];
-
 type BoardTileRole = keyof typeof BOARD_LIMITS;
+type BoardPathKind = 'main' | 'hub' | 'bonusDetour' | 'riskyShortcut';
 
 interface BoardTile {
   id: string;
   q: number;
   r: number;
   role: BoardTileRole;
+  pathKind: BoardPathKind;
   isMainPath: boolean;
+  isHub: boolean;
   isStart: boolean;
   isFinish: boolean;
 }
@@ -911,6 +905,14 @@ function BoardPreview({ board }: { board: GeneratedBoard }) {
                   {tile.isStart ? 'D' : 'A'}
                 </text>
               )}
+              {tile.isHub && !tile.isStart && !tile.isFinish && (
+                <circle
+                  r="6"
+                  fill="#ffffff"
+                  stroke="#111827"
+                  strokeWidth="2"
+                />
+              )}
             </g>
           ))}
         </svg>
@@ -928,27 +930,58 @@ function generateBoard(targetMinutes: number, playerCount: number): GeneratedBoa
     45
   );
   const targetTileCount = clampNumber(
-    fastestPathLength + Math.round(fastestPathLength * 0.65),
+    fastestPathLength + Math.round(fastestPathLength * 0.55),
     fastestPathLength,
     45
   );
   const mainPath = buildMainPath(fastestPathLength);
-  const tilesByKey = new Map<string, { q: number; r: number; isMainPath: boolean }>();
+  const hubIndexes = getHubIndexes(mainPath.length);
+  const tilesByKey = new Map<string, {
+    q: number;
+    r: number;
+    isMainPath: boolean;
+    isHub: boolean;
+    pathKind: BoardPathKind;
+  }>();
 
-  mainPath.forEach((coord) => {
-    tilesByKey.set(coordKey(coord), { ...coord, isMainPath: true });
+  mainPath.forEach((coord, index) => {
+    const isHub = hubIndexes.includes(index);
+    tilesByKey.set(coordKey(coord), {
+      ...coord,
+      isMainPath: true,
+      isHub,
+      pathKind: isHub ? 'hub' : 'main',
+    });
   });
 
-  let attempts = 0;
-  while (tilesByKey.size < targetTileCount && attempts < 80) {
-    attempts += 1;
-    const startIndex = randomInt(1, Math.max(1, mainPath.length - 5));
-    const endIndex = randomInt(startIndex + 3, Math.min(mainPath.length - 1, startIndex + 8));
-    const detour = buildDetour(mainPath[startIndex], mainPath[endIndex], tilesByKey);
+  const hubPairs = hubIndexes
+    .slice(0, -1)
+    .map((startIndex, index) => ({
+      startIndex,
+      endIndex: hubIndexes[index + 1],
+    }))
+    .filter(pair => pair.endIndex - pair.startIndex >= 3);
 
-    detour.forEach((coord) => {
+  for (const [pairIndex, pair] of shuffleArray(hubPairs).entries()) {
+    if (tilesByKey.size >= targetTileCount) break;
+
+    const branchOffset = pairIndex % 2 === 0 ? 2 : -2;
+    const branchKind: BoardPathKind = branchOffset > 0 ? 'bonusDetour' : 'riskyShortcut';
+    const branch = buildForwardBranch(
+      mainPath[pair.startIndex],
+      mainPath[pair.endIndex],
+      branchOffset,
+      targetTileCount - tilesByKey.size
+    );
+
+    branch.forEach((coord) => {
       if (tilesByKey.size < targetTileCount) {
-        tilesByKey.set(coordKey(coord), { ...coord, isMainPath: false });
+        tilesByKey.set(coordKey(coord), {
+          ...coord,
+          isMainPath: false,
+          isHub: false,
+          pathKind: branchKind,
+        });
       }
     });
   }
@@ -973,7 +1006,7 @@ function generateBoard(targetMinutes: number, playerCount: number): GeneratedBoa
     const key = coordKey(tile);
     const isStart = key === startKey;
     const isFinish = key === finishKey;
-    const role = chooseBoardRole(tile.isMainPath, isStart || isFinish, counts);
+    const role = chooseBoardRole(tile.pathKind, isStart || isFinish, counts);
 
     counts[role] += 1;
 
@@ -982,7 +1015,9 @@ function generateBoard(targetMinutes: number, playerCount: number): GeneratedBoa
       q: tile.q,
       r: tile.r,
       role,
+      pathKind: tile.pathKind,
       isMainPath: tile.isMainPath,
+      isHub: tile.isHub,
       isStart,
       isFinish,
     };
@@ -998,87 +1033,70 @@ function generateBoard(targetMinutes: number, playerCount: number): GeneratedBoa
 }
 
 function buildMainPath(length: number) {
-  const path = [{ q: 0, r: 0 }];
-  const occupied = new Set([coordKey(path[0])]);
-  const preferredDirections = [
-    { q: 1, r: 0 },
-    { q: 1, r: -1 },
-    { q: 0, r: 1 },
-  ];
-
-  while (path.length < length) {
-    const previous = path[path.length - 1];
-    const directions = shuffleArray([...preferredDirections, ...HEX_DIRECTIONS]);
-    const next = directions
-      .map(direction => addCoords(previous, direction))
-      .find(coord => !occupied.has(coordKey(coord)));
-
-    if (!next) break;
-
-    path.push(next);
-    occupied.add(coordKey(next));
-  }
-
-  return path;
+  return Array.from({ length }, (_, index) => ({ q: index, r: 0 }));
 }
 
-function buildDetour(
-  start: { q: number; r: number },
-  finish: { q: number; r: number },
-  occupiedTiles: Map<string, { q: number; r: number; isMainPath: boolean }>
-) {
-  const finishKey = coordKey(finish);
-  const queue: Array<Array<{ q: number; r: number }>> = [[start]];
-  const visited = new Set([coordKey(start)]);
-  const maxPathLength = 10;
+function getHubIndexes(pathLength: number) {
+  const indexes = new Set([0, pathLength - 1]);
+  const hubSpacing = pathLength >= 24 ? 6 : pathLength >= 14 ? 5 : 4;
 
-  while (queue.length > 0) {
-    const path = queue.shift() ?? [];
-    const current = path[path.length - 1];
-
-    if (path.length > maxPathLength) continue;
-
-    for (const direction of shuffleArray([...HEX_DIRECTIONS])) {
-      const next = addCoords(current, direction);
-      const key = coordKey(next);
-
-      if (visited.has(key)) continue;
-      if (key !== finishKey && occupiedTiles.has(key)) continue;
-
-      const nextPath = [...path, next];
-      if (key === finishKey && nextPath.length > 3) {
-        return nextPath.slice(1, -1);
-      }
-
-      visited.add(key);
-      queue.push(nextPath);
-    }
+  for (let index = hubSpacing; index < pathLength - 1; index += hubSpacing) {
+    indexes.add(index);
   }
 
-  return [];
+  return Array.from(indexes).sort((a, b) => a - b);
+}
+
+function buildForwardBranch(
+  start: { q: number; r: number },
+  finish: { q: number; r: number },
+  offset: number,
+  remainingSlots: number
+) {
+  const branch: Array<{ q: number; r: number }> = [];
+  const isUpperBranch = offset < 0;
+  const lane = isUpperBranch ? -1 : 1;
+  const firstQ = isUpperBranch ? start.q + 1 : start.q;
+  const lastQ = isUpperBranch ? finish.q : finish.q - 1;
+
+  for (let q = firstQ; q <= lastQ; q += 1) {
+    branch.push({ q, r: lane });
+  }
+
+  const cleanBranch = dedupeCoords(branch)
+    .filter(coord => coord.q >= start.q && coord.q <= finish.q);
+
+  return cleanBranch.length <= remainingSlots ? cleanBranch : [];
 }
 
 function chooseBoardRole(
-  isMainPath: boolean,
+  pathKind: BoardPathKind,
   isEndpoint: boolean,
   counts: Record<BoardTileRole, number>
 ): BoardTileRole {
   if (isEndpoint) return 'neutral';
 
   const roll = Math.random();
-  const preferredRoles: BoardTileRole[] = isMainPath
-    ? roll < 0.65
-      ? ['neutral', 'bonus', 'malus']
-      : roll < 0.84
+  const preferredRoles: BoardTileRole[] = pathKind === 'hub'
+    ? ['neutral', 'bonus', 'malus']
+    : pathKind === 'bonusDetour'
+      ? roll < 0.62
         ? ['bonus', 'neutral', 'malus']
-        : ['malus', 'neutral', 'bonus']
-    : roll < 0.42
+        : ['neutral', 'bonus', 'malus']
+      : pathKind === 'riskyShortcut'
+        ? roll < 0.62
+          ? ['malus', 'neutral', 'bonus']
+          : ['neutral', 'malus', 'bonus']
+        : roll < 0.7
       ? ['neutral', 'bonus', 'malus']
-      : roll < 0.72
+      : roll < 0.88
         ? ['bonus', 'neutral', 'malus']
         : ['malus', 'neutral', 'bonus'];
 
-  return preferredRoles.find(role => counts[role] < BOARD_LIMITS[role]) ?? 'neutral';
+  return preferredRoles.find(role => counts[role] < BOARD_LIMITS[role])
+    ?? (Object.keys(BOARD_LIMITS) as BoardTileRole[])
+      .find(role => counts[role] < BOARD_LIMITS[role])
+    ?? 'neutral';
 }
 
 function getHexPoints(size: number) {
@@ -1088,22 +1106,20 @@ function getHexPoints(size: number) {
   }).join(' ');
 }
 
-function addCoords(a: { q: number; r: number }, b: { q: number; r: number }) {
-  return {
-    q: a.q + b.q,
-    r: a.r + b.r,
-  };
-}
-
 function coordKey(coord: { q: number; r: number }) {
   return `${coord.q},${coord.r}`;
 }
 
-function randomInt(min: number, max: number) {
-  const safeMin = Math.ceil(min);
-  const safeMax = Math.max(safeMin, Math.floor(max));
+function dedupeCoords(coords: Array<{ q: number; r: number }>) {
+  const seen = new Set<string>();
 
-  return Math.floor(Math.random() * (safeMax - safeMin + 1)) + safeMin;
+  return coords.filter((coord) => {
+    const key = coordKey(coord);
+    if (seen.has(key)) return false;
+
+    seen.add(key);
+    return true;
+  });
 }
 
 function shuffleArray<T>(items: T[]) {
