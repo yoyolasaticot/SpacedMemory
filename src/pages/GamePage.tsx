@@ -46,6 +46,56 @@ const DIFFICULTY_COLORS = {
   5: '#E11D48', // Rose
 };
 
+const BOARD_LIMITS = {
+  malus: 9,
+  bonus: 18,
+  neutral: 18,
+};
+
+const BOARD_TILE_STYLES = {
+  malus: {
+    label: 'Malus',
+    color: '#DC2626',
+  },
+  bonus: {
+    label: 'Bonus',
+    color: '#7C3AED',
+  },
+  neutral: {
+    label: 'Neutre',
+    color: '#2563EB',
+  },
+};
+
+const HEX_DIRECTIONS = [
+  { q: 1, r: 0 },
+  { q: 1, r: -1 },
+  { q: 0, r: -1 },
+  { q: -1, r: 0 },
+  { q: -1, r: 1 },
+  { q: 0, r: 1 },
+];
+
+type BoardTileRole = keyof typeof BOARD_LIMITS;
+
+interface BoardTile {
+  id: string;
+  q: number;
+  r: number;
+  role: BoardTileRole;
+  isMainPath: boolean;
+  isStart: boolean;
+  isFinish: boolean;
+}
+
+interface GeneratedBoard {
+  tiles: BoardTile[];
+  fastestPathLength: number;
+  targetMinutes: number;
+  playerCount: number;
+  counts: Record<BoardTileRole, number>;
+}
+
 interface GamePageProps {
   user: User;
   profile: Profile;
@@ -59,10 +109,13 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
   const [currentCard, setCurrentCard] = useState<Flashcard | null>(null);
   const [currentCardDeckId, setCurrentCardDeckId] = useState<string | null>(null);
   const [isFlipped, setIsFlipped] = useState(false);
-  const [view, setView] = useState<'select' | 'color' | 'play'>('select');
+  const [view, setView] = useState<'select' | 'color' | 'board' | 'play'>('select');
   const [colorSelectionModalOpen, setColorSelectionModalOpen] = useState(false);
   const [selectedDeckForColor, setSelectedDeckForColor] = useState<Deck | null>(null);
   const [usedFlashcards, setUsedFlashcards] = useState<string[]>([]);
+  const [gameDurationMinutes, setGameDurationMinutes] = useState(30);
+  const [playerCount, setPlayerCount] = useState(3);
+  const [generatedBoard, setGeneratedBoard] = useState<GeneratedBoard>(() => generateBoard(30, 3));
   const [confirmExitOpen, setConfirmExitOpen] = useState(false);
   const [confirmQuarantineOpen, setConfirmQuarantineOpen] = useState(false);
   const [quarantineNote, setQuarantineNote] = useState('');
@@ -111,6 +164,17 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
     if (!deck) return false;
 
     return deck.visibility === 'public' || deck.owner_id === user.id;
+  };
+
+  const prepareBoard = () => {
+    if (!allSelectedDecksHaveColor) return;
+
+    setGeneratedBoard(generateBoard(gameDurationMinutes, playerCount));
+    setView('board');
+  };
+
+  const regenerateBoard = () => {
+    setGeneratedBoard(generateBoard(gameDurationMinutes, playerCount));
   };
 
   const startGame = async () => {
@@ -243,7 +307,115 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
     setQuarantineError('');
     setAllCardsDoneOpen(false);
     setFinishedPileColor(null);
+    setGeneratedBoard(generateBoard(gameDurationMinutes, playerCount));
   };
+
+  if (view === 'board') {
+    return (
+      <div className="min-h-screen app-shell pt-4 pb-24">
+        <div className="px-4">
+          <button
+            onClick={() => setView('select')}
+            className="flex items-center text-violet-700 mb-4 font-medium"
+          >
+            <ChevronLeft className="w-5 h-5 mr-1" />
+            <span>Retour</span>
+          </button>
+
+          <div className="mission-strip p-5 mb-6">
+            <div className="relative z-10">
+              <h1 className="text-3xl font-black leading-tight">Plateau</h1>
+              <p className="text-sm text-white/78 mt-2">
+                Ajuste la duree et les joueurs, puis lance la partie.
+              </p>
+            </div>
+          </div>
+
+          <div className="app-panel rounded-lg p-4 mb-4">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="text-sm font-semibold text-gray-700">Duree</span>
+                <input
+                  type="number"
+                  min={10}
+                  max={120}
+                  step={5}
+                  value={gameDurationMinutes}
+                  onChange={(event) => {
+                    const nextDuration = clampNumber(Number(event.target.value), 10, 120);
+                    setGameDurationMinutes(nextDuration);
+                    setGeneratedBoard(generateBoard(nextDuration, playerCount));
+                  }}
+                  className="mt-1 w-full rounded-lg border px-3 py-2 app-input outline-none"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-semibold text-gray-700">Joueurs</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={8}
+                  value={playerCount}
+                  onChange={(event) => {
+                    const nextPlayerCount = clampNumber(Number(event.target.value), 1, 8);
+                    setPlayerCount(nextPlayerCount);
+                    setGeneratedBoard(generateBoard(gameDurationMinutes, nextPlayerCount));
+                  }}
+                  className="mt-1 w-full rounded-lg border px-3 py-2 app-input outline-none"
+                />
+              </label>
+            </div>
+
+            <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-lg bg-white/70 p-2">
+                <div className="text-lg font-black text-gray-900">{generatedBoard.fastestPathLength}</div>
+                <div className="text-xs text-gray-500">chemin rapide</div>
+              </div>
+              <div className="rounded-lg bg-white/70 p-2">
+                <div className="text-lg font-black text-gray-900">{generatedBoard.tiles.length}</div>
+                <div className="text-xs text-gray-500">cases</div>
+              </div>
+              <div className="rounded-lg bg-white/70 p-2">
+                <div className="text-lg font-black text-gray-900">{Math.max(0, 45 - generatedBoard.tiles.length)}</div>
+                <div className="text-xs text-gray-500">reserve</div>
+              </div>
+            </div>
+          </div>
+
+          <BoardPreview board={generatedBoard} />
+
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            {(Object.keys(BOARD_TILE_STYLES) as BoardTileRole[]).map((role) => (
+              <div key={role} className="rounded-lg bg-white/75 p-2 text-center text-xs font-semibold text-gray-700">
+                <span
+                  className="mx-auto mb-1 block h-4 w-4 rounded"
+                  style={{ backgroundColor: BOARD_TILE_STYLES[role].color }}
+                />
+                {BOARD_TILE_STYLES[role].label} {generatedBoard.counts[role]}/{BOARD_LIMITS[role]}
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button
+              onClick={regenerateBoard}
+              className="py-3 app-muted-button rounded-lg font-semibold"
+            >
+              Regenerer
+            </button>
+
+            <button
+              onClick={startGame}
+              className="py-3 app-primary rounded-lg font-semibold"
+            >
+              Commencer
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (view === 'play') {
     const selectedDecks = decks.filter(deck => selectedDecksWithColor.has(deck.id));
@@ -620,7 +792,7 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
               )}
 
               <button
-                onClick={startGame}
+                onClick={prepareBoard}
                 disabled={!allSelectedDecksHaveColor}
                 className={`w-full py-4 rounded-lg font-semibold text-lg transition-all ${
                   !allSelectedDecksHaveColor
@@ -632,7 +804,7 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
                   ? 'Sélectionnez au moins un paquet'
                   : !allSelectedDecksHaveColor
                     ? 'Choisissez une couleur pour chaque paquet'
-                    : `Commencer (${selectedDecksWithColor.size})`}
+                    : `Preparer le plateau (${selectedDecksWithColor.size})`}
               </button>
             </>
           )}
@@ -685,6 +857,270 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
   }
 
   return null;
+}
+
+function BoardPreview({ board }: { board: GeneratedBoard }) {
+  const hexSize = 22;
+  const hexWidth = Math.sqrt(3) * hexSize;
+  const hexHeight = 2 * hexSize;
+  const points = getHexPoints(hexSize);
+  const positions = board.tiles.map((tile) => ({
+    tile,
+    x: hexWidth * (tile.q + tile.r / 2),
+    y: hexSize * 1.5 * tile.r,
+  }));
+  const minX = Math.min(...positions.map(position => position.x)) - hexWidth;
+  const maxX = Math.max(...positions.map(position => position.x)) + hexWidth;
+  const minY = Math.min(...positions.map(position => position.y)) - hexHeight;
+  const maxY = Math.max(...positions.map(position => position.y)) + hexHeight;
+
+  return (
+    <div className="app-panel rounded-lg p-3">
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-black text-gray-900">Variante generee</h2>
+          <p className="text-xs text-gray-500">
+            Depart commun, arrivee commune, chemins alternatifs inclus.
+          </p>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-lg bg-white/70 p-2">
+        <svg
+          viewBox={`${minX} ${minY} ${maxX - minX} ${maxY - minY}`}
+          className="h-80 min-w-[520px] w-full"
+          role="img"
+          aria-label="Plateau genere"
+        >
+          {positions.map(({ tile, x, y }) => (
+            <g key={tile.id} transform={`translate(${x} ${y})`}>
+              <polygon
+                points={points}
+                fill={BOARD_TILE_STYLES[tile.role].color}
+                stroke={tile.isMainPath ? '#111827' : '#ffffff'}
+                strokeWidth={tile.isMainPath ? 3 : 2}
+              />
+              {(tile.isStart || tile.isFinish) && (
+                <text
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fill="#ffffff"
+                  fontSize="14"
+                  fontWeight="900"
+                >
+                  {tile.isStart ? 'D' : 'A'}
+                </text>
+              )}
+            </g>
+          ))}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function generateBoard(targetMinutes: number, playerCount: number): GeneratedBoard {
+  const safeMinutes = clampNumber(targetMinutes, 10, 120);
+  const safePlayerCount = clampNumber(playerCount, 1, 8);
+  const fastestPathLength = clampNumber(
+    Math.round((safeMinutes * 1.5) / safePlayerCount),
+    8,
+    45
+  );
+  const targetTileCount = clampNumber(
+    fastestPathLength + Math.round(fastestPathLength * 0.65),
+    fastestPathLength,
+    45
+  );
+  const mainPath = buildMainPath(fastestPathLength);
+  const tilesByKey = new Map<string, { q: number; r: number; isMainPath: boolean }>();
+
+  mainPath.forEach((coord) => {
+    tilesByKey.set(coordKey(coord), { ...coord, isMainPath: true });
+  });
+
+  let attempts = 0;
+  while (tilesByKey.size < targetTileCount && attempts < 80) {
+    attempts += 1;
+    const startIndex = randomInt(1, Math.max(1, mainPath.length - 5));
+    const endIndex = randomInt(startIndex + 3, Math.min(mainPath.length - 1, startIndex + 8));
+    const detour = buildDetour(mainPath[startIndex], mainPath[endIndex], tilesByKey);
+
+    detour.forEach((coord) => {
+      if (tilesByKey.size < targetTileCount) {
+        tilesByKey.set(coordKey(coord), { ...coord, isMainPath: false });
+      }
+    });
+  }
+
+  const startKey = coordKey(mainPath[0]);
+  const finishKey = coordKey(mainPath[mainPath.length - 1]);
+  const rawTiles = Array.from(tilesByKey.values()).sort((a, b) => {
+    const aKey = coordKey(a);
+    const bKey = coordKey(b);
+    const aIsEndpoint = aKey === startKey || aKey === finishKey;
+    const bIsEndpoint = bKey === startKey || bKey === finishKey;
+
+    return Number(bIsEndpoint) - Number(aIsEndpoint);
+  });
+  const counts: Record<BoardTileRole, number> = {
+    malus: 0,
+    bonus: 0,
+    neutral: 0,
+  };
+
+  const tiles = rawTiles.map((tile) => {
+    const key = coordKey(tile);
+    const isStart = key === startKey;
+    const isFinish = key === finishKey;
+    const role = chooseBoardRole(tile.isMainPath, isStart || isFinish, counts);
+
+    counts[role] += 1;
+
+    return {
+      id: key,
+      q: tile.q,
+      r: tile.r,
+      role,
+      isMainPath: tile.isMainPath,
+      isStart,
+      isFinish,
+    };
+  });
+
+  return {
+    tiles,
+    fastestPathLength,
+    targetMinutes: safeMinutes,
+    playerCount: safePlayerCount,
+    counts,
+  };
+}
+
+function buildMainPath(length: number) {
+  const path = [{ q: 0, r: 0 }];
+  const occupied = new Set([coordKey(path[0])]);
+  const preferredDirections = [
+    { q: 1, r: 0 },
+    { q: 1, r: -1 },
+    { q: 0, r: 1 },
+  ];
+
+  while (path.length < length) {
+    const previous = path[path.length - 1];
+    const directions = shuffleArray([...preferredDirections, ...HEX_DIRECTIONS]);
+    const next = directions
+      .map(direction => addCoords(previous, direction))
+      .find(coord => !occupied.has(coordKey(coord)));
+
+    if (!next) break;
+
+    path.push(next);
+    occupied.add(coordKey(next));
+  }
+
+  return path;
+}
+
+function buildDetour(
+  start: { q: number; r: number },
+  finish: { q: number; r: number },
+  occupiedTiles: Map<string, { q: number; r: number; isMainPath: boolean }>
+) {
+  const finishKey = coordKey(finish);
+  const queue: Array<Array<{ q: number; r: number }>> = [[start]];
+  const visited = new Set([coordKey(start)]);
+  const maxPathLength = 10;
+
+  while (queue.length > 0) {
+    const path = queue.shift() ?? [];
+    const current = path[path.length - 1];
+
+    if (path.length > maxPathLength) continue;
+
+    for (const direction of shuffleArray([...HEX_DIRECTIONS])) {
+      const next = addCoords(current, direction);
+      const key = coordKey(next);
+
+      if (visited.has(key)) continue;
+      if (key !== finishKey && occupiedTiles.has(key)) continue;
+
+      const nextPath = [...path, next];
+      if (key === finishKey && nextPath.length > 3) {
+        return nextPath.slice(1, -1);
+      }
+
+      visited.add(key);
+      queue.push(nextPath);
+    }
+  }
+
+  return [];
+}
+
+function chooseBoardRole(
+  isMainPath: boolean,
+  isEndpoint: boolean,
+  counts: Record<BoardTileRole, number>
+): BoardTileRole {
+  if (isEndpoint) return 'neutral';
+
+  const roll = Math.random();
+  const preferredRoles: BoardTileRole[] = isMainPath
+    ? roll < 0.65
+      ? ['neutral', 'bonus', 'malus']
+      : roll < 0.84
+        ? ['bonus', 'neutral', 'malus']
+        : ['malus', 'neutral', 'bonus']
+    : roll < 0.42
+      ? ['neutral', 'bonus', 'malus']
+      : roll < 0.72
+        ? ['bonus', 'neutral', 'malus']
+        : ['malus', 'neutral', 'bonus'];
+
+  return preferredRoles.find(role => counts[role] < BOARD_LIMITS[role]) ?? 'neutral';
+}
+
+function getHexPoints(size: number) {
+  return Array.from({ length: 6 }, (_, index) => {
+    const angle = (Math.PI / 180) * (60 * index - 30);
+    return `${Math.cos(angle) * size},${Math.sin(angle) * size}`;
+  }).join(' ');
+}
+
+function addCoords(a: { q: number; r: number }, b: { q: number; r: number }) {
+  return {
+    q: a.q + b.q,
+    r: a.r + b.r,
+  };
+}
+
+function coordKey(coord: { q: number; r: number }) {
+  return `${coord.q},${coord.r}`;
+}
+
+function randomInt(min: number, max: number) {
+  const safeMin = Math.ceil(min);
+  const safeMax = Math.max(safeMin, Math.floor(max));
+
+  return Math.floor(Math.random() * (safeMax - safeMin + 1)) + safeMin;
+}
+
+function shuffleArray<T>(items: T[]) {
+  const result = [...items];
+
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [result[index], result[randomIndex]] = [result[randomIndex], result[index]];
+  }
+
+  return result;
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  if (Number.isNaN(value)) return min;
+
+  return Math.min(max, Math.max(min, value));
 }
 
 function getColorOption(color: string) {
