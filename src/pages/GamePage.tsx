@@ -639,8 +639,8 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
         </div>
 
         {colorSelectionModalOpen && selectedDeckForColor && (
-          <div className="fixed inset-0 bg-slate-950/50 flex items-end z-50 p-4">
-            <div className="app-panel rounded-t-2xl p-6 w-full">
+          <div className="fixed inset-0 bg-slate-950/50 flex items-center justify-center z-50 p-4 pb-28">
+            <div className="app-panel rounded-lg p-6 w-full max-w-sm max-h-[calc(100vh-8rem)] overflow-y-auto">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold text-gray-800">Couleur pour {selectedDeckForColor.name}</h3>
                 <button
