@@ -46,7 +46,6 @@ export default function DeckCreator({
   const [editingDeck, setEditingDeck] = useState<string | null>(null);
   const [editDeckName, setEditDeckName] = useState('');
   const [deckToDelete, setDeckToDelete] = useState<Deck | null>(null);
-  const [deckToPublish, setDeckToPublish] = useState<Deck | null>(null);
   const [highlightedFlashcardId, setHighlightedFlashcardId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -206,28 +205,9 @@ export default function DeckCreator({
   };
 
   function canEditDeck(deck: Deck) {
-    return isAdmin
+    return (deck.visibility === 'public' && isAdmin)
       || (deck.visibility === 'personal' && deck.owner_id === user.id);
   }
-
-  const publishDeck = async (deck: Deck) => {
-    const { error } = await supabase
-      .from('decks')
-      .update({ visibility: 'public' })
-      .eq('id', deck.id);
-
-    if (error) return;
-
-    const updatedDeck: Deck = { ...deck, visibility: 'public' };
-
-    setDecks(decks.map((item) => item.id === deck.id ? updatedDeck : item));
-
-    if (selectedDeck?.id === deck.id) {
-      setSelectedDeck(updatedDeck);
-    }
-
-    setDeckToPublish(null);
-  };
 
   const deleteDeck = async (id: string) => {
     const { error } = await supabase
@@ -358,28 +338,8 @@ export default function DeckCreator({
         <div className="mission-strip p-5 mb-6">
           <div className="relative z-10">
             <h2 className="text-3xl font-black leading-tight">{selectedDeck.name}</h2>
-            <div className="mt-2 inline-flex rounded-full bg-white/18 px-3 py-1 text-xs font-bold text-white">
-              {selectedDeck.visibility === 'public' ? 'Public' : 'Prive'}
-            </div>
           </div>
         </div>
-
-        {isAdmin && selectedDeck.visibility === 'personal' && (
-          <div className="mb-6 rounded-lg border border-teal-200 bg-teal-50 p-3">
-            <div className="text-sm font-semibold text-teal-900">
-              Ce paquet est prive.
-            </div>
-            <p className="mt-1 text-sm text-teal-800">
-              Tu peux le rendre public pour le rendre disponible aux autres joueurs.
-            </p>
-            <button
-              onClick={() => setDeckToPublish(selectedDeck)}
-              className="mt-3 w-full rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white"
-            >
-              Passer ce paquet en public
-            </button>
-          </div>
-        )}
 
         {canManageSelectedDeck ? (
           <div className="space-y-3 mb-6">
@@ -564,34 +524,6 @@ export default function DeckCreator({
 
                 <button
                   onClick={()=>setEditingFlashcard(null)}
-                  className="flex-1 app-muted-button py-2 rounded"
-                >
-                  Annuler
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {deckToPublish && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="app-panel p-6 rounded w-full max-w-sm">
-              <h3 className="font-bold mb-4">Rendre le paquet public ?</h3>
-
-              <p className="mb-4 text-sm text-gray-600">
-                Le paquet "{deckToPublish.name}" deviendra visible et jouable par tous les utilisateurs.
-              </p>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => publishDeck(deckToPublish)}
-                  className="flex-1 bg-teal-600 text-white py-2 rounded"
-                >
-                  Confirmer
-                </button>
-
-                <button
-                  onClick={() => setDeckToPublish(null)}
                   className="flex-1 app-muted-button py-2 rounded"
                 >
                   Annuler
