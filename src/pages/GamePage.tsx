@@ -4,17 +4,36 @@ import { ChevronLeft, X } from 'lucide-react';
 import { supabase, Deck, Flashcard, Profile } from '../lib/supabase';
 
 const COLOR_OPTIONS = [
-  '#2F7BFF',
-  '#7C3CFF',
-  '#14D4BF',
-  '#FFBD3D',
-  '#FF4F7B',
-  '#F97316',
-  '#22C55E',
-  '#06B6D4',
-  '#A855F7',
-  '#0F766E',
-  '#E11D48',
+  {
+    value: '#005AB5',
+    label: 'Bleu',
+    pattern: 'repeating-linear-gradient(45deg, transparent 0 8px, rgba(255, 255, 255, 0.28) 8px 12px)',
+  },
+  {
+    value: '#B45309',
+    label: 'Orange',
+    pattern: 'repeating-linear-gradient(90deg, transparent 0 10px, rgba(255, 255, 255, 0.3) 10px 14px)',
+  },
+  {
+    value: '#047857',
+    label: 'Vert',
+    pattern: 'radial-gradient(circle, rgba(255, 255, 255, 0.35) 2px, transparent 2.5px)',
+  },
+  {
+    value: '#6D28D9',
+    label: 'Violet',
+    pattern: 'repeating-linear-gradient(135deg, transparent 0 7px, rgba(255, 255, 255, 0.3) 7px 9px)',
+  },
+  {
+    value: '#B91C1C',
+    label: 'Rouge',
+    pattern: 'repeating-linear-gradient(0deg, transparent 0 9px, rgba(255, 255, 255, 0.28) 9px 12px)',
+  },
+  {
+    value: '#111827',
+    label: 'Noir',
+    pattern: 'linear-gradient(45deg, rgba(255, 255, 255, 0.24) 25%, transparent 25% 50%, rgba(255, 255, 255, 0.24) 50% 75%, transparent 75%)',
+  },
 ];
 
 const UNSET_COLOR = 'UNSET';
@@ -240,8 +259,9 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
     ).map(([color, pileDecks]) => ({ color, decks: pileDecks }));
     const currentDeck = decks.find(d => d.id === currentCardDeckId);
     const currentDeckColor = currentDeck
-      ? selectedDecksWithColor.get(currentDeck.id) || '#3B82F6'
-      : '#3B82F6';
+      ? selectedDecksWithColor.get(currentDeck.id) || COLOR_OPTIONS[0].value
+      : COLOR_OPTIONS[0].value;
+    const currentColorOption = getColorOption(currentDeckColor);
     const currentPileDeckIds = getDeckIdsForColor(currentDeckColor);
     const currentPileRemainingCount = allFlashcards.filter(
       card => currentPileDeckIds.includes(card.deck_id) && !usedFlashcards.includes(card.id)
@@ -288,9 +308,12 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
                 <div
                   className="p-8 min-h-80 flex items-center justify-center transition-all"
                   style={{
-                    backgroundColor: isFlipped
-                      ? adjustBrightness(currentDeckColor, -20)
-                      : currentDeckColor,
+                    ...getColorPatternStyle(
+                      isFlipped
+                        ? adjustBrightness(currentDeckColor, -20)
+                        : currentDeckColor,
+                      currentDeckColor
+                    ),
                   }}
                 >
                   <div className="text-center">
@@ -306,7 +329,7 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
 
               <div className="space-y-3">
                 <p className="text-gray-700 text-center text-sm font-semibold">
-                  Il reste {currentPileRemainingCount} carte{currentPileRemainingCount > 1 ? 's' : ''} dans cette pile
+                  Il reste {currentPileRemainingCount} carte{currentPileRemainingCount > 1 ? 's' : ''} dans la pile {currentColorOption.label}
                 </p>
 
                 <p className="text-gray-600 text-center text-sm">
@@ -342,6 +365,7 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
                   ).length;
                   const totalCount = pileCards.length;
                   const pileName = pile.decks.map(deck => deck.name).join(' + ');
+                  const colorOption = getColorOption(pile.color);
 
                   return (
                     <button
@@ -354,8 +378,12 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
 
                       <div
                         className="relative p-5 rounded-[1.5rem] memory-card text-white min-h-[300px] flex flex-col justify-center items-center border border-white/30"
-                        style={{ backgroundColor: pile.color }}
+                        style={getColorPatternStyle(pile.color)}
                       >
+                        <div className="absolute top-3 left-3 rounded-full bg-black/20 px-3 py-1 text-xs font-bold">
+                          {colorOption.label}
+                        </div>
+
                         <div className="font-bold text-4xl text-center leading-snug break-words">
                           {pileName}
                         </div>
@@ -558,6 +586,10 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
                     {selectedDecks.map((deck) => {
                       const selectedColor = selectedDecksWithColor.get(deck.id);
                       const deckColor = selectedColor && selectedColor !== UNSET_COLOR ? selectedColor : '#9CA3AF';
+                      const colorOption = selectedColor && selectedColor !== UNSET_COLOR
+                        ? getColorOption(selectedColor)
+                        : null;
+
                       return (
                         <button
                           key={deck.id}
@@ -565,16 +597,21 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
                             setSelectedDeckForColor(deck);
                             setColorSelectionModalOpen(true);
                           }}
-                          className="w-full p-3 rounded-lg flex items-center justify-between text-white font-medium hover:opacity-90 transition-opacity"
-                          style={{ backgroundColor: deckColor }}
+                          className="w-full p-3 rounded-lg flex items-center justify-between font-medium hover:opacity-90 transition-opacity app-card"
                         >
                           <div className="flex flex-col items-start">
-                            <span>{deck.name}</span>
+                            <span className="text-gray-900">{deck.name}</span>
                             {selectedColor === UNSET_COLOR && (
-                              <span className="text-xs opacity-90">Couleur à choisir</span>
+                              <span className="text-xs text-gray-500">Couleur à choisir</span>
+                            )}
+                            {colorOption && (
+                              <span className="text-xs text-gray-500">{colorOption.label}</span>
                             )}
                           </div>
-                          <div className="w-4 h-4 rounded border-2 border-white" />
+                          <div
+                            className="h-9 w-9 rounded-lg border border-white shadow-sm"
+                            style={getColorPatternStyle(deckColor)}
+                          />
                         </button>
                       );
                     })}
@@ -617,21 +654,26 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
                 Les paquets avec la meme couleur seront melanges dans une seule pile.
               </p>
 
-              <div className="grid grid-cols-5 gap-3">
-                {COLOR_OPTIONS.map((color) => {
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {COLOR_OPTIONS.map((colorOption) => {
                   const isSelectedForCurrentDeck =
-                    selectedDecksWithColor.get(selectedDeckForColor.id) === color;
+                    selectedDecksWithColor.get(selectedDeckForColor.id) === colorOption.value;
 
                   return (
                     <button
-                      key={color}
-                      onClick={() => updateDeckColor(selectedDeckForColor.id, color)}
-                      className="w-full aspect-square rounded-lg border-4 transition-all hover:scale-110"
+                      key={colorOption.value}
+                      onClick={() => updateDeckColor(selectedDeckForColor.id, colorOption.value)}
+                      className="min-h-24 rounded-lg border-4 p-3 text-left text-white transition-all hover:scale-[1.02]"
                       style={{
-                        backgroundColor: color,
-                        borderColor: isSelectedForCurrentDeck ? '#000' : 'transparent',
+                        ...getColorPatternStyle(colorOption.value),
+                        borderColor: isSelectedForCurrentDeck ? '#111827' : 'transparent',
                       }}
-                    />
+                    >
+                      <div className="text-sm font-black drop-shadow-sm">{colorOption.label}</div>
+                      <div className="mt-1 text-xs font-medium text-white/85">
+                        {getPatternLabel(colorOption.value)}
+                      </div>
+                    </button>
                   );
                 })}
               </div>
@@ -643,6 +685,52 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
   }
 
   return null;
+}
+
+function getColorOption(color: string) {
+  return COLOR_OPTIONS.find(option => option.value === color) ?? COLOR_OPTIONS[0];
+}
+
+function getColorPatternStyle(color: string, patternColor = color) {
+  const colorOption = COLOR_OPTIONS.find(option => option.value === patternColor);
+
+  if (!colorOption) {
+    return {
+      backgroundColor: color,
+    };
+  }
+
+  const isDottedPattern = colorOption.value === '#047857';
+  const isCheckerPattern = colorOption.value === '#111827';
+
+  return {
+    backgroundColor: color,
+    backgroundImage: colorOption.pattern,
+    backgroundSize: isDottedPattern
+      ? '14px 14px'
+      : isCheckerPattern
+        ? '18px 18px'
+        : undefined,
+  };
+}
+
+function getPatternLabel(color: string) {
+  switch (getColorOption(color).value) {
+    case '#005AB5':
+      return 'diagonales';
+    case '#B45309':
+      return 'verticales';
+    case '#047857':
+      return 'points';
+    case '#6D28D9':
+      return 'diagonales fines';
+    case '#B91C1C':
+      return 'horizontales';
+    case '#111827':
+      return 'damier';
+    default:
+      return 'motif';
+  }
 }
 
 function adjustBrightness(color: string, percent: number): string {
