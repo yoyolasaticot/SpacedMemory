@@ -9,6 +9,9 @@ import { Profile, supabase } from './lib/supabase';
 
 type Page = 'creator' | 'game' | 'review';
 
+const CURRENT_PAGE_STORAGE_KEY = 'spaced-memory-current-page';
+const PAGES: Page[] = ['creator', 'game', 'review'];
+
 interface QuarantineNotification {
   id: string;
   deck_id: string;
@@ -17,8 +20,18 @@ interface QuarantineNotification {
   quarantined_at: string | null;
 }
 
+function getStoredPage(): Page {
+  try {
+    const storedPage = window.localStorage.getItem(CURRENT_PAGE_STORAGE_KEY);
+
+    return PAGES.includes(storedPage as Page) ? storedPage as Page : 'creator';
+  } catch {
+    return 'creator';
+  }
+}
+
 function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('creator');
+  const [currentPage, setCurrentPage] = useState<Page>(getStoredPage);
   const [isGameInProgress, setIsGameInProgress] = useState(false);
   const [pendingPage, setPendingPage] = useState<Page | null>(null);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
@@ -54,10 +67,25 @@ function App() {
       }
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       const sessionUser = session?.user ?? null;
-      setUser(sessionUser);
-      setCurrentPage('creator');
+
+      setUser(previousUser => {
+        const previousUserId = previousUser?.id ?? null;
+        const nextUserId = sessionUser?.id ?? null;
+
+        if (event === 'SIGNED_OUT' || (previousUserId && nextUserId && previousUserId !== nextUserId)) {
+          setCurrentPage('creator');
+
+          try {
+            window.localStorage.removeItem(CURRENT_PAGE_STORAGE_KEY);
+          } catch {
+            // Ignore storage errors so auth changes never blank the app.
+          }
+        }
+
+        return sessionUser;
+      });
 
       if (sessionUser) {
         loadProfile(sessionUser.id);
@@ -73,6 +101,16 @@ function App() {
       listener.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    try {
+      window.localStorage.setItem(CURRENT_PAGE_STORAGE_KEY, currentPage);
+    } catch {
+      // Ignore storage errors; page navigation still works for the active session.
+    }
+  }, [currentPage, user]);
 
   const loadProfile = async (userId: string) => {
     const { data } = await supabase
