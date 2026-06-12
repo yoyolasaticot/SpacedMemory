@@ -9,9 +9,12 @@ CREATE TABLE IF NOT EXISTS community_boards (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL CHECK (char_length(trim(name)) BETWEEN 1 AND 80),
   tiles jsonb NOT NULL,
-  created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_by uuid DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at timestamptz DEFAULT now()
 );
+
+ALTER TABLE community_boards
+  ALTER COLUMN created_by SET DEFAULT auth.uid();
 
 ALTER TABLE community_boards ENABLE ROW LEVEL SECURITY;
 

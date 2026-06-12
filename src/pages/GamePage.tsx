@@ -268,14 +268,13 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
       .insert({
         name: boardName,
         tiles: board.tiles,
-        created_by: user.id,
       })
       .select()
       .single();
 
     if (error) {
       console.error('Board creation failed', error);
-      setCreateBoardError('Impossible de creer le plateau pour le moment.');
+      setCreateBoardError(getCommunityBoardErrorMessage(error.message));
       return null;
     }
 
@@ -1428,4 +1427,24 @@ function getQuarantineErrorMessage(message: string) {
   }
 
   return "La carte n'a pas pu etre mise en quarantaine.";
+}
+
+function getCommunityBoardErrorMessage(message: string) {
+  if (message.includes('community_boards')) {
+    return "La table des plateaux communautaires n'existe pas encore. Applique la migration Supabase des community_boards.";
+  }
+
+  if (message.toLowerCase().includes('row-level security')) {
+    return "Supabase refuse la creation du plateau avec la securite RLS. Verifie que tu es connecte et que la migration community_boards est appliquee.";
+  }
+
+  if (message.includes('violates foreign key constraint')) {
+    return "Supabase ne reconnait pas l'utilisateur connecte. Deconnecte-toi puis reconnecte-toi.";
+  }
+
+  if (message.includes('JWT') || message.includes('auth')) {
+    return "Reconnecte-toi avant de creer un plateau.";
+  }
+
+  return `Impossible de creer le plateau: ${message}`;
 }
