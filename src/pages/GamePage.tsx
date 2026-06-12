@@ -67,17 +67,14 @@ const BOARD_TILE_STYLES = {
   },
 };
 
-const HEX_NEIGHBOR_DIRECTIONS = [
-  { q: 1, r: 0 },
-  { q: -1, r: 0 },
-  { q: 0, r: 1 },
-  { q: 0, r: -1 },
-  { q: 1, r: -1 },
-  { q: -1, r: 1 },
-];
-
 type BoardTileRole = keyof typeof BOARD_LIMITS;
 type BoardPathKind = 'main' | 'hub' | 'bonusDetour' | 'riskyShortcut';
+
+interface BoardBranch {
+  startKey: string;
+  finishKey: string;
+  coords: Array<{ q: number; r: number }>;
+}
 
 interface BoardTile {
   id: string;
@@ -939,12 +936,13 @@ function generateBoard(targetMinutes: number, playerCount: number): GeneratedBoa
     45
   );
   const targetTileCount = clampNumber(
-    fastestPathLength + Math.round(fastestPathLength * 0.55),
+    fastestPathLength + Math.max(Math.round(fastestPathLength * 0.55), 7),
     fastestPathLength,
     45
   );
   const mainPath = buildMainPath(fastestPathLength);
   const hubIndexes = getHubIndexes(mainPath.length);
+  const acceptedBranches: BoardBranch[] = [];
   const tilesByKey = new Map<string, {
     q: number;
     r: number;
@@ -985,6 +983,8 @@ function generateBoard(targetMinutes: number, playerCount: number): GeneratedBoa
       targetTileCount - tilesByKey.size
     );
 
+    if (branch.length === 0) continue;
+
     const candidateTilesByKey = new Map(tilesByKey);
 
     branch.forEach((coord) => {
@@ -998,11 +998,19 @@ function generateBoard(targetMinutes: number, playerCount: number): GeneratedBoa
       }
     });
 
-    if (isBoardConnectivityAllowed(candidateTilesByKey, startKey, finishKey)) {
+    const candidateBranch = {
+      startKey: coordKey(mainPath[pair.startIndex]),
+      finishKey: coordKey(mainPath[pair.endIndex]),
+      coords: branch,
+    };
+    const candidateBranches = [...acceptedBranches, candidateBranch];
+
+    if (isBoardConnectivityAllowed(mainPath, candidateBranches, candidateTilesByKey.size, startKey, finishKey)) {
       tilesByKey.clear();
       candidateTilesByKey.forEach((tile, key) => {
         tilesByKey.set(key, tile);
       });
+      acceptedBranches.push(candidateBranch);
     }
   }
 
@@ -1075,8 +1083,8 @@ function buildForwardBranch(
   const isUpperBranch = offset < 0;
   const connectorLane = isUpperBranch ? -1 : 1;
   const detourLane = isUpperBranch ? -2 : 2;
-  const firstQ = isUpperBranch ? start.q + 1 : start.q - 1;
-  const lastQ = finish.q;
+  const firstQ = isUpperBranch ? start.q + 1 : start.q;
+  const lastQ = isUpperBranch ? finish.q : finish.q - 1;
 
   branch.push({ q: firstQ, r: connectorLane });
 
@@ -1084,21 +1092,23 @@ function buildForwardBranch(
     branch.push({ q, r: detourLane });
   }
 
-  branch.push({ q: finish.q, r: connectorLane });
+  branch.push({ q: lastQ, r: connectorLane });
 
   const cleanBranch = dedupeCoords(branch)
-    .filter(coord => coord.q >= start.q - 1 && coord.q <= finish.q);
+    .filter(coord => coord.q >= start.q && coord.q <= finish.q);
 
   return cleanBranch.length <= remainingSlots ? cleanBranch : [];
 }
 
 function isBoardConnectivityAllowed(
-  tilesByKey: Map<string, { q: number; r: number }>,
+  mainPath: Array<{ q: number; r: number }>,
+  branches: BoardBranch[],
+  tileCount: number,
   startKey: string,
   finishKey: string
 ) {
-  const connectionCounts = getBoardConnectionCounts(tilesByKey);
-  const maxHighConnectionTiles = Math.floor(tilesByKey.size * 0.15);
+  const connectionCounts = getBoardConnectionCounts(mainPath, branches);
+  const maxHighConnectionTiles = Math.floor(tileCount * 0.15);
   let highConnectionTileCount = 0;
 
   for (const [key, connectionCount] of connectionCounts) {
@@ -1117,15 +1127,35 @@ function isBoardConnectivityAllowed(
   return true;
 }
 
-function getBoardConnectionCounts(tilesByKey: Map<string, { q: number; r: number }>) {
+function getBoardConnectionCounts(
+  mainPath: Array<{ q: number; r: number }>,
+  branches: BoardBranch[]
+) {
+  const connections = new Map<string, Set<string>>();
+  const addConnection = (from: string, to: string) => {
+    if (!connections.has(from)) connections.set(from, new Set());
+    if (!connections.has(to)) connections.set(to, new Set());
+
+    connections.get(from)?.add(to);
+    connections.get(to)?.add(from);
+  };
+
+  for (let index = 0; index < mainPath.length - 1; index += 1) {
+    addConnection(coordKey(mainPath[index]), coordKey(mainPath[index + 1]));
+  }
+
+  branches.forEach((branch) => {
+    const branchKeys = branch.coords.map(coordKey);
+    const pathKeys = [branch.startKey, ...branchKeys, branch.finishKey];
+
+    for (let index = 0; index < pathKeys.length - 1; index += 1) {
+      addConnection(pathKeys[index], pathKeys[index + 1]);
+    }
+  });
+
   const connectionCounts = new Map<string, number>();
-
-  tilesByKey.forEach((tile, key) => {
-    const connectionCount = HEX_NEIGHBOR_DIRECTIONS.filter(direction =>
-      tilesByKey.has(coordKey({ q: tile.q + direction.q, r: tile.r + direction.r }))
-    ).length;
-
-    connectionCounts.set(key, connectionCount);
+  connections.forEach((connectedKeys, key) => {
+    connectionCounts.set(key, connectedKeys.size);
   });
 
   return connectionCounts;
