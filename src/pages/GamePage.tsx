@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { User } from '@supabase/supabase-js';
 import { ChevronLeft, X } from 'lucide-react';
-import { supabase, Deck, Flashcard, Profile } from '../lib/supabase';
+import { supabase, CommunityBoard, Deck, Flashcard, Profile } from '../lib/supabase';
 
 const COLOR_OPTIONS = [
   {
@@ -46,12 +46,6 @@ const DIFFICULTY_COLORS = {
   5: '#E11D48', // Rose
 };
 
-const BOARD_LIMITS = {
-  malus: 9,
-  bonus: 18,
-  neutral: 18,
-};
-
 const BOARD_TILE_STYLES = {
   malus: {
     label: 'Malus',
@@ -67,14 +61,26 @@ const BOARD_TILE_STYLES = {
   },
 };
 
-type BoardTileRole = keyof typeof BOARD_LIMITS;
-type BoardPathKind = 'main' | 'hub' | 'bonusDetour' | 'riskyShortcut';
+const BOARD_TEMPLATES: BoardTemplate[] = [
+  {
+    id: 'classic',
+    name: 'Classique',
+    description: 'Un chemin principal avec un grand détour.',
+  },
+  {
+    id: 'two-detours',
+    name: 'Deux detours',
+    description: 'Deux chemins alternatifs de difficulté moyenne.',
+  },
+  {
+    id: 'shortcut',
+    name: 'Raccourci risque',
+    description: 'Un raccourci malus et un détour bonus.',
+  },
+];
 
-interface BoardBranch {
-  startKey: string;
-  finishKey: string;
-  coords: Array<{ q: number; r: number }>;
-}
+type BoardTileRole = 'malus' | 'bonus' | 'neutral';
+type BoardPathKind = 'main' | 'hub' | 'bonusDetour' | 'riskyShortcut';
 
 interface BoardTile {
   id: string;
@@ -96,6 +102,12 @@ interface GeneratedBoard {
   counts: Record<BoardTileRole, number>;
 }
 
+interface BoardTemplate {
+  id: string;
+  name: string;
+  description: string;
+}
+
 interface GamePageProps {
   user: User;
   profile: Profile;
@@ -113,9 +125,11 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
   const [colorSelectionModalOpen, setColorSelectionModalOpen] = useState(false);
   const [selectedDeckForColor, setSelectedDeckForColor] = useState<Deck | null>(null);
   const [usedFlashcards, setUsedFlashcards] = useState<string[]>([]);
-  const [gameDurationMinutes, setGameDurationMinutes] = useState(30);
-  const [playerCount, setPlayerCount] = useState(3);
-  const [generatedBoard, setGeneratedBoard] = useState<GeneratedBoard>(() => generateBoard(30, 3));
+  const [communityBoards, setCommunityBoards] = useState<CommunityBoard[]>([]);
+  const [selectedCommunityBoardId, setSelectedCommunityBoardId] = useState<string | null>(null);
+  const [newBoardName, setNewBoardName] = useState('');
+  const [selectedBoardTemplateId, setSelectedBoardTemplateId] = useState(BOARD_TEMPLATES[0].id);
+  const [createBoardError, setCreateBoardError] = useState('');
   const [confirmExitOpen, setConfirmExitOpen] = useState(false);
   const [confirmQuarantineOpen, setConfirmQuarantineOpen] = useState(false);
   const [quarantineNote, setQuarantineNote] = useState('');
@@ -125,6 +139,7 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
 
   useEffect(() => {
     loadDecks();
+    loadCommunityBoards();
   }, []);
 
   const loadDecks = async () => {
@@ -135,6 +150,22 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
 
     if (!error && data) {
       setDecks(data);
+    }
+  };
+
+  const loadCommunityBoards = async () => {
+    const { data, error } = await supabase
+      .from('community_boards')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      setCommunityBoards(data);
+      setSelectedCommunityBoardId((currentId) =>
+        currentId && data.some((board) => board.id === currentId)
+          ? currentId
+          : data[0]?.id ?? null
+      );
     }
   };
 
@@ -158,6 +189,9 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
   const allSelectedDecksHaveColor =
     selectedDecksWithColor.size > 0 &&
     Array.from(selectedDecksWithColor.values()).every(color => color !== UNSET_COLOR);
+  const selectedCommunityBoard = communityBoards.find((board) => board.id === selectedCommunityBoardId) ?? null;
+  const selectedBoard = selectedCommunityBoard ? communityBoardToGeneratedBoard(selectedCommunityBoard) : null;
+  const canStartWithBoard = allSelectedDecksHaveColor && selectedBoard !== null;
 
   const canQuarantineDeck = (deckId: string | null) => {
     const deck = decks.find(item => item.id === deckId);
@@ -169,16 +203,44 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
   const prepareBoard = () => {
     if (!allSelectedDecksHaveColor) return;
 
-    setGeneratedBoard(generateBoard(gameDurationMinutes, playerCount));
     setView('board');
   };
 
-  const regenerateBoard = () => {
-    setGeneratedBoard(generateBoard(gameDurationMinutes, playerCount));
+  const createCommunityBoard = async () => {
+    const boardName = newBoardName.trim();
+    if (!boardName) {
+      setCreateBoardError('Donne un nom au plateau.');
+      return;
+    }
+
+    const board = createBoardFromTemplate(selectedBoardTemplateId);
+    const { data, error } = await supabase
+      .from('community_boards')
+      .insert({
+        name: boardName,
+        tiles: board.tiles,
+        created_by: user.id,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Board creation failed', error);
+      setCreateBoardError('Impossible de creer le plateau pour le moment.');
+      return;
+    }
+
+    if (data) {
+      setCommunityBoards((boards) => [data, ...boards]);
+      setSelectedCommunityBoardId(data.id);
+    }
+
+    setNewBoardName('');
+    setCreateBoardError('');
   };
 
   const startGame = async () => {
-    if (!allSelectedDecksHaveColor) return;
+    if (!canStartWithBoard) return;
 
     setIsGameInProgress(true);
 
@@ -307,7 +369,6 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
     setQuarantineError('');
     setAllCardsDoneOpen(false);
     setFinishedPileColor(null);
-    setGeneratedBoard(generateBoard(gameDurationMinutes, playerCount));
   };
 
   if (view === 'board') {
@@ -324,92 +385,124 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
 
           <div className="mission-strip p-5 mb-6">
             <div className="relative z-10">
-              <h1 className="text-3xl font-black leading-tight">Plateau</h1>
+              <h1 className="text-3xl font-black leading-tight">Plateaux communautaires</h1>
               <p className="text-sm text-white/78 mt-2">
-                Ajuste la duree et les joueurs, puis lance la partie.
+                Choisis un plateau partage ou cree-en un pour tout le monde.
               </p>
             </div>
           </div>
 
           <div className="app-panel rounded-lg p-4 mb-4">
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block">
-                <span className="text-sm font-semibold text-gray-700">Duree</span>
-                <input
-                  type="number"
-                  min={10}
-                  max={120}
-                  step={5}
-                  value={gameDurationMinutes}
-                  onChange={(event) => {
-                    const nextDuration = clampNumber(Number(event.target.value), 10, 120);
-                    setGameDurationMinutes(nextDuration);
-                    setGeneratedBoard(generateBoard(nextDuration, playerCount));
-                  }}
-                  className="mt-1 w-full rounded-lg border px-3 py-2 app-input outline-none"
-                />
-              </label>
+            <h2 className="mb-3 text-lg font-black text-gray-900">Choisir un plateau</h2>
+            {communityBoards.length === 0 ? (
+              <p className="rounded-lg bg-white/70 p-3 text-sm text-gray-600">
+                Aucun plateau partage pour l'instant. Cree le premier plateau de la communaute.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {communityBoards.map((board) => {
+                  const boardPreview = communityBoardToGeneratedBoard(board);
+                  const isSelected = board.id === selectedCommunityBoardId;
 
-              <label className="block">
-                <span className="text-sm font-semibold text-gray-700">Joueurs</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={8}
-                  value={playerCount}
-                  onChange={(event) => {
-                    const nextPlayerCount = clampNumber(Number(event.target.value), 1, 8);
-                    setPlayerCount(nextPlayerCount);
-                    setGeneratedBoard(generateBoard(gameDurationMinutes, nextPlayerCount));
-                  }}
-                  className="mt-1 w-full rounded-lg border px-3 py-2 app-input outline-none"
-                />
-              </label>
-            </div>
-
-            <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-              <div className="rounded-lg bg-white/70 p-2">
-                <div className="text-lg font-black text-gray-900">{generatedBoard.fastestPathLength}</div>
-                <div className="text-xs text-gray-500">chemin rapide</div>
+                  return (
+                    <button
+                      key={board.id}
+                      onClick={() => setSelectedCommunityBoardId(board.id)}
+                      className={`w-full rounded-lg p-3 text-left transition-all app-card ${
+                        isSelected ? 'ring-2 ring-violet-400' : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="font-bold text-gray-900">{board.name}</div>
+                          <div className="text-xs text-gray-500">
+                            {boardPreview?.tiles.length ?? 0} cases
+                          </div>
+                        </div>
+                        {isSelected && (
+                          <div className="rounded-full bg-violet-600 px-2 py-1 text-xs font-black text-white">
+                            OK
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
-              <div className="rounded-lg bg-white/70 p-2">
-                <div className="text-lg font-black text-gray-900">{generatedBoard.tiles.length}</div>
-                <div className="text-xs text-gray-500">cases</div>
-              </div>
-              <div className="rounded-lg bg-white/70 p-2">
-                <div className="text-lg font-black text-gray-900">{Math.max(0, 45 - generatedBoard.tiles.length)}</div>
-                <div className="text-xs text-gray-500">reserve</div>
-              </div>
-            </div>
+            )}
           </div>
 
-          <BoardPreview board={generatedBoard} />
+          <div className="app-panel rounded-lg p-4 mb-4">
+            <h2 className="mb-3 text-lg font-black text-gray-900">Creer un plateau partage</h2>
+            <input
+              type="text"
+              value={newBoardName}
+              onChange={(event) => {
+                setNewBoardName(event.target.value);
+                setCreateBoardError('');
+              }}
+              placeholder="Nom du plateau"
+              className="mb-3 w-full rounded-lg border px-3 py-2 app-input outline-none"
+            />
 
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            {(Object.keys(BOARD_TILE_STYLES) as BoardTileRole[]).map((role) => (
-              <div key={role} className="rounded-lg bg-white/75 p-2 text-center text-xs font-semibold text-gray-700">
-                <span
-                  className="mx-auto mb-1 block h-4 w-4 rounded"
-                  style={{ backgroundColor: BOARD_TILE_STYLES[role].color }}
-                />
-                {BOARD_TILE_STYLES[role].label} {generatedBoard.counts[role]}/{BOARD_LIMITS[role]}
-              </div>
-            ))}
-          </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {BOARD_TEMPLATES.map((template) => (
+                <button
+                  key={template.id}
+                  onClick={() => setSelectedBoardTemplateId(template.id)}
+                  className={`rounded-lg p-3 text-left text-sm app-card ${
+                    selectedBoardTemplateId === template.id ? 'ring-2 ring-violet-400' : ''
+                  }`}
+                >
+                  <div className="font-bold text-gray-900">{template.name}</div>
+                  <div className="mt-1 text-xs text-gray-500">{template.description}</div>
+                </button>
+              ))}
+            </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-2">
+            {createBoardError && (
+              <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm font-medium text-red-700">
+                {createBoardError}
+              </p>
+            )}
+
             <button
-              onClick={regenerateBoard}
-              className="py-3 app-muted-button rounded-lg font-semibold"
+              onClick={createCommunityBoard}
+              className="mt-3 w-full py-3 app-primary rounded-lg font-semibold"
             >
-              Regenerer
+              Publier le plateau
             </button>
+          </div>
 
+          {selectedBoard && (
+            <>
+              <BoardPreview board={selectedBoard} title={selectedCommunityBoard?.name ?? 'Plateau'} />
+
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {(Object.keys(BOARD_TILE_STYLES) as BoardTileRole[]).map((role) => (
+                  <div key={role} className="rounded-lg bg-white/75 p-2 text-center text-xs font-semibold text-gray-700">
+                    <span
+                      className="mx-auto mb-1 block h-4 w-4 rounded"
+                      style={{ backgroundColor: BOARD_TILE_STYLES[role].color }}
+                    />
+                    {BOARD_TILE_STYLES[role].label} {selectedBoard.counts[role]}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          <div className="mt-4">
             <button
               onClick={startGame}
-              className="py-3 app-primary rounded-lg font-semibold"
+              disabled={!canStartWithBoard}
+              className={`w-full py-3 rounded-lg font-semibold ${
+                canStartWithBoard
+                  ? 'app-primary'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
             >
-              Commencer
+              {selectedBoard ? 'Commencer' : 'Choisissez ou creez un plateau'}
             </button>
           </div>
         </div>
@@ -804,7 +897,7 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
                   ? 'Sélectionnez au moins un paquet'
                   : !allSelectedDecksHaveColor
                     ? 'Choisissez une couleur pour chaque paquet'
-                    : `Preparer le plateau (${selectedDecksWithColor.size})`}
+                    : `Choisir un plateau (${selectedDecksWithColor.size})`}
               </button>
             </>
           )}
@@ -859,7 +952,7 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
   return null;
 }
 
-function BoardPreview({ board }: { board: GeneratedBoard }) {
+function BoardPreview({ board, title = 'Plateau' }: { board: GeneratedBoard; title?: string }) {
   const hexSize = 22;
   const hexWidth = Math.sqrt(3) * hexSize;
   const hexHeight = 2 * hexSize;
@@ -878,9 +971,9 @@ function BoardPreview({ board }: { board: GeneratedBoard }) {
     <div className="app-panel rounded-lg p-3">
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-black text-gray-900">Variante generee</h2>
+          <h2 className="text-lg font-black text-gray-900">{title}</h2>
           <p className="text-xs text-gray-500">
-            Depart commun, arrivee commune, chemins alternatifs inclus.
+            Plateau partage par la communaute.
           </p>
         </div>
       </div>
@@ -927,268 +1020,142 @@ function BoardPreview({ board }: { board: GeneratedBoard }) {
   );
 }
 
-function generateBoard(targetMinutes: number, playerCount: number): GeneratedBoard {
-  const safeMinutes = clampNumber(targetMinutes, 10, 120);
-  const safePlayerCount = clampNumber(playerCount, 1, 8);
-  const fastestPathLength = clampNumber(
-    Math.round((safeMinutes * 1.5) / safePlayerCount),
-    8,
-    45
-  );
-  const targetTileCount = clampNumber(
-    fastestPathLength + Math.max(Math.round(fastestPathLength * 0.55), 7),
-    fastestPathLength,
-    45
-  );
-  const mainPath = buildMainPath(fastestPathLength);
-  const hubIndexes = getHubIndexes(mainPath.length);
-  const acceptedBranches: BoardBranch[] = [];
-  const tilesByKey = new Map<string, {
-    q: number;
-    r: number;
-    isMainPath: boolean;
-    isHub: boolean;
-    pathKind: BoardPathKind;
-  }>();
+function communityBoardToGeneratedBoard(board: CommunityBoard): GeneratedBoard | null {
+  if (!Array.isArray(board.tiles)) return null;
 
-  mainPath.forEach((coord, index) => {
-    const isHub = hubIndexes.includes(index);
-    tilesByKey.set(coordKey(coord), {
-      ...coord,
-      isMainPath: true,
-      isHub,
-      pathKind: isHub ? 'hub' : 'main',
-    });
-  });
+  const tiles = board.tiles.filter(isBoardTile);
+  if (tiles.length === 0) return null;
 
-  const startKey = coordKey(mainPath[0]);
-  const finishKey = coordKey(mainPath[mainPath.length - 1]);
-  const hubPairs = hubIndexes
-    .slice(0, -1)
-    .map((startIndex, index) => ({
-      startIndex,
-      endIndex: hubIndexes[index + 1],
-    }))
-    .filter(pair => pair.endIndex - pair.startIndex >= 3);
+  return {
+    tiles,
+    fastestPathLength: tiles.filter((tile) => tile.isMainPath).length,
+    targetMinutes: 0,
+    playerCount: 0,
+    counts: getBoardRoleCounts(tiles),
+  };
+}
 
-  for (const [pairIndex, pair] of shuffleArray(hubPairs).entries()) {
-    if (tilesByKey.size >= targetTileCount) break;
-
-    const branchOffset = pairIndex % 2 === 0 ? 2 : -2;
-    const branchKind: BoardPathKind = branchOffset > 0 ? 'bonusDetour' : 'riskyShortcut';
-    const branch = buildForwardBranch(
-      mainPath[pair.startIndex],
-      mainPath[pair.endIndex],
-      branchOffset,
-      targetTileCount - tilesByKey.size
-    );
-
-    if (branch.length === 0) continue;
-
-    const candidateTilesByKey = new Map(tilesByKey);
-
-    branch.forEach((coord) => {
-      if (candidateTilesByKey.size < targetTileCount) {
-        candidateTilesByKey.set(coordKey(coord), {
-          ...coord,
-          isMainPath: false,
-          isHub: false,
-          pathKind: branchKind,
-        });
-      }
-    });
-
-    const candidateBranch = {
-      startKey: coordKey(mainPath[pair.startIndex]),
-      finishKey: coordKey(mainPath[pair.endIndex]),
-      coords: branch,
-    };
-    const candidateBranches = [...acceptedBranches, candidateBranch];
-
-    if (isBoardConnectivityAllowed(mainPath, candidateBranches, candidateTilesByKey.size, startKey, finishKey)) {
-      tilesByKey.clear();
-      candidateTilesByKey.forEach((tile, key) => {
-        tilesByKey.set(key, tile);
-      });
-      acceptedBranches.push(candidateBranch);
-    }
+function createBoardFromTemplate(templateId: string): GeneratedBoard {
+  if (templateId === 'two-detours') {
+    return createTemplateBoard(22, [
+      { start: 4, end: 10, lane: -1, pathKind: 'bonusDetour' },
+      { start: 12, end: 18, lane: 1, pathKind: 'riskyShortcut' },
+    ]);
   }
 
-  const rawTiles = Array.from(tilesByKey.values()).sort((a, b) => {
-    const aKey = coordKey(a);
-    const bKey = coordKey(b);
-    const aIsEndpoint = aKey === startKey || aKey === finishKey;
-    const bIsEndpoint = bKey === startKey || bKey === finishKey;
+  if (templateId === 'shortcut') {
+    return createTemplateBoard(20, [
+      { start: 5, end: 10, lane: 1, pathKind: 'riskyShortcut' },
+      { start: 11, end: 17, lane: -1, pathKind: 'bonusDetour' },
+    ]);
+  }
 
-    return Number(bIsEndpoint) - Number(aIsEndpoint);
+  return createTemplateBoard(18, [
+    { start: 4, end: 12, lane: -1, pathKind: 'bonusDetour' },
+  ]);
+}
+
+function createTemplateBoard(
+  mainLength: number,
+  branches: Array<{ start: number; end: number; lane: number; pathKind: Extract<BoardPathKind, 'bonusDetour' | 'riskyShortcut'> }>
+): GeneratedBoard {
+  const hubIndexes = new Set<number>([0, mainLength - 1]);
+  branches.forEach((branch) => {
+    hubIndexes.add(branch.start);
+    hubIndexes.add(branch.end);
   });
-  const counts: Record<BoardTileRole, number> = {
-    malus: 0,
-    bonus: 0,
-    neutral: 0,
-  };
 
-  const tiles = rawTiles.map((tile) => {
-    const key = coordKey(tile);
-    const isStart = key === startKey;
-    const isFinish = key === finishKey;
-    const role = chooseBoardRole(tile.pathKind, isStart || isFinish, counts);
+  const tiles: BoardTile[] = [];
 
-    counts[role] += 1;
+  for (let q = 0; q < mainLength; q += 1) {
+    tiles.push(createBoardTile(q, 0, 'main', true, hubIndexes.has(q), q, mainLength - 1));
+  }
 
-    return {
-      id: key,
-      q: tile.q,
-      r: tile.r,
-      role,
-      pathKind: tile.pathKind,
-      isMainPath: tile.isMainPath,
-      isHub: tile.isHub,
-      isStart,
-      isFinish,
-    };
+  branches.forEach((branch) => {
+    for (let q = branch.start; q <= branch.end; q += 1) {
+      tiles.push(createBoardTile(q, branch.lane, branch.pathKind, false, false, q, mainLength - 1));
+    }
   });
 
   return {
     tiles,
-    fastestPathLength,
-    targetMinutes: safeMinutes,
-    playerCount: safePlayerCount,
-    counts,
+    fastestPathLength: mainLength,
+    targetMinutes: 0,
+    playerCount: 0,
+    counts: getBoardRoleCounts(tiles),
   };
 }
 
-function buildMainPath(length: number) {
-  return Array.from({ length }, (_, index) => ({ q: index, r: 0 }));
-}
-
-function getHubIndexes(pathLength: number) {
-  const indexes = new Set([0, pathLength - 1]);
-  const hubSpacing = pathLength >= 24 ? 6 : pathLength >= 14 ? 5 : 4;
-
-  for (let index = hubSpacing; index < pathLength - 1; index += hubSpacing) {
-    indexes.add(index);
-  }
-
-  return Array.from(indexes).sort((a, b) => a - b);
-}
-
-function buildForwardBranch(
-  start: { q: number; r: number },
-  finish: { q: number; r: number },
-  offset: number,
-  remainingSlots: number
-) {
-  const branch: Array<{ q: number; r: number }> = [];
-  const isUpperBranch = offset < 0;
-  const connectorLane = isUpperBranch ? -1 : 1;
-  const detourLane = isUpperBranch ? -2 : 2;
-  const firstQ = isUpperBranch ? start.q + 1 : start.q;
-  const lastQ = isUpperBranch ? finish.q : finish.q - 1;
-
-  branch.push({ q: firstQ, r: connectorLane });
-
-  for (let q = firstQ; q <= lastQ; q += 1) {
-    branch.push({ q, r: detourLane });
-  }
-
-  branch.push({ q: lastQ, r: connectorLane });
-
-  const cleanBranch = dedupeCoords(branch)
-    .filter(coord => coord.q >= start.q && coord.q <= finish.q);
-
-  return cleanBranch.length <= remainingSlots ? cleanBranch : [];
-}
-
-function isBoardConnectivityAllowed(
-  mainPath: Array<{ q: number; r: number }>,
-  branches: BoardBranch[],
-  tileCount: number,
-  startKey: string,
-  finishKey: string
-) {
-  const connectionCounts = getBoardConnectionCounts(mainPath, branches);
-  const maxHighConnectionTiles = Math.floor(tileCount * 0.15);
-  let highConnectionTileCount = 0;
-
-  for (const [key, connectionCount] of connectionCounts) {
-    if (key === startKey || key === finishKey) {
-      if (connectionCount < 1 || connectionCount > 2) return false;
-      continue;
-    }
-
-    if (connectionCount === 2) continue;
-    if (connectionCount < 2) return false;
-
-    highConnectionTileCount += 1;
-    if (highConnectionTileCount > maxHighConnectionTiles) return false;
-  }
-
-  return true;
-}
-
-function getBoardConnectionCounts(
-  mainPath: Array<{ q: number; r: number }>,
-  branches: BoardBranch[]
-) {
-  const connections = new Map<string, Set<string>>();
-  const addConnection = (from: string, to: string) => {
-    if (!connections.has(from)) connections.set(from, new Set());
-    if (!connections.has(to)) connections.set(to, new Set());
-
-    connections.get(from)?.add(to);
-    connections.get(to)?.add(from);
-  };
-
-  for (let index = 0; index < mainPath.length - 1; index += 1) {
-    addConnection(coordKey(mainPath[index]), coordKey(mainPath[index + 1]));
-  }
-
-  branches.forEach((branch) => {
-    const branchKeys = branch.coords.map(coordKey);
-    const pathKeys = [branch.startKey, ...branchKeys, branch.finishKey];
-
-    for (let index = 0; index < pathKeys.length - 1; index += 1) {
-      addConnection(pathKeys[index], pathKeys[index + 1]);
-    }
-  });
-
-  const connectionCounts = new Map<string, number>();
-  connections.forEach((connectedKeys, key) => {
-    connectionCounts.set(key, connectedKeys.size);
-  });
-
-  return connectionCounts;
-}
-
-function chooseBoardRole(
+function createBoardTile(
+  q: number,
+  r: number,
   pathKind: BoardPathKind,
-  isEndpoint: boolean,
-  counts: Record<BoardTileRole, number>
-): BoardTileRole {
-  if (isEndpoint) return 'neutral';
+  isMainPath: boolean,
+  isHub: boolean,
+  pathIndex: number,
+  finishIndex: number
+): BoardTile {
+  const isStart = isMainPath && pathIndex === 0;
+  const isFinish = isMainPath && pathIndex === finishIndex;
+  const role = chooseTemplateRole(pathKind, isStart || isFinish, pathIndex);
 
-  const roll = Math.random();
-  const preferredRoles: BoardTileRole[] = pathKind === 'hub'
-    ? ['neutral', 'bonus', 'malus']
-    : pathKind === 'bonusDetour'
-      ? roll < 0.62
-        ? ['bonus', 'neutral', 'malus']
-        : ['neutral', 'bonus', 'malus']
-      : pathKind === 'riskyShortcut'
-        ? roll < 0.62
-          ? ['malus', 'neutral', 'bonus']
-          : ['neutral', 'malus', 'bonus']
-        : roll < 0.7
-      ? ['neutral', 'bonus', 'malus']
-      : roll < 0.88
-        ? ['bonus', 'neutral', 'malus']
-        : ['malus', 'neutral', 'bonus'];
+  return {
+    id: coordKey({ q, r }),
+    q,
+    r,
+    role,
+    pathKind: isHub ? 'hub' : pathKind,
+    isMainPath,
+    isHub,
+    isStart,
+    isFinish,
+  };
+}
 
-  return preferredRoles.find(role => counts[role] < BOARD_LIMITS[role])
-    ?? (Object.keys(BOARD_LIMITS) as BoardTileRole[])
-      .find(role => counts[role] < BOARD_LIMITS[role])
-    ?? 'neutral';
+function chooseTemplateRole(pathKind: BoardPathKind, isEndpoint: boolean, pathIndex: number): BoardTileRole {
+  if (isEndpoint || pathKind === 'hub') return 'neutral';
+  if (pathKind === 'bonusDetour') return pathIndex % 4 === 0 ? 'neutral' : 'bonus';
+  if (pathKind === 'riskyShortcut') return pathIndex % 4 === 0 ? 'neutral' : 'malus';
+  if (pathIndex % 7 === 0) return 'bonus';
+  if (pathIndex % 5 === 0) return 'malus';
+
+  return 'neutral';
+}
+
+function getBoardRoleCounts(tiles: BoardTile[]) {
+  return tiles.reduce<Record<BoardTileRole, number>>(
+    (counts, tile) => {
+      counts[tile.role] += 1;
+      return counts;
+    },
+    { malus: 0, bonus: 0, neutral: 0 }
+  );
+}
+
+function isBoardTile(tile: unknown): tile is BoardTile {
+  if (!tile || typeof tile !== 'object') return false;
+
+  const candidate = tile as Partial<BoardTile>;
+  return typeof candidate.id === 'string'
+    && typeof candidate.q === 'number'
+    && typeof candidate.r === 'number'
+    && isBoardTileRole(candidate.role)
+    && isBoardPathKind(candidate.pathKind)
+    && typeof candidate.isMainPath === 'boolean'
+    && typeof candidate.isHub === 'boolean'
+    && typeof candidate.isStart === 'boolean'
+    && typeof candidate.isFinish === 'boolean';
+}
+
+function isBoardTileRole(role: unknown): role is BoardTileRole {
+  return role === 'malus' || role === 'bonus' || role === 'neutral';
+}
+
+function isBoardPathKind(pathKind: unknown): pathKind is BoardPathKind {
+  return pathKind === 'main'
+    || pathKind === 'hub'
+    || pathKind === 'bonusDetour'
+    || pathKind === 'riskyShortcut';
 }
 
 function getHexPoints(size: number) {
@@ -1200,35 +1167,6 @@ function getHexPoints(size: number) {
 
 function coordKey(coord: { q: number; r: number }) {
   return `${coord.q},${coord.r}`;
-}
-
-function dedupeCoords(coords: Array<{ q: number; r: number }>) {
-  const seen = new Set<string>();
-
-  return coords.filter((coord) => {
-    const key = coordKey(coord);
-    if (seen.has(key)) return false;
-
-    seen.add(key);
-    return true;
-  });
-}
-
-function shuffleArray<T>(items: T[]) {
-  const result = [...items];
-
-  for (let index = result.length - 1; index > 0; index -= 1) {
-    const randomIndex = Math.floor(Math.random() * (index + 1));
-    [result[index], result[randomIndex]] = [result[randomIndex], result[index]];
-  }
-
-  return result;
-}
-
-function clampNumber(value: number, min: number, max: number) {
-  if (Number.isNaN(value)) return min;
-
-  return Math.min(max, Math.max(min, value));
 }
 
 function getColorOption(color: string) {

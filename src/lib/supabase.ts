@@ -41,6 +41,14 @@ export interface Flashcard {
   created_at: string;
 }
 
+export interface CommunityBoard {
+  id: string;
+  name: string;
+  tiles: unknown;
+  created_by: string | null;
+  created_at: string;
+}
+
 export interface ReviewProgress {
   user_id: string;
   flashcard_id: string;
