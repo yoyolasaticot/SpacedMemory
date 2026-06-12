@@ -67,6 +67,15 @@ const BOARD_TILE_STYLES = {
   },
 };
 
+const HEX_NEIGHBOR_DIRECTIONS = [
+  { q: 1, r: 0 },
+  { q: -1, r: 0 },
+  { q: 0, r: 1 },
+  { q: 0, r: -1 },
+  { q: 1, r: -1 },
+  { q: -1, r: 1 },
+];
+
 type BoardTileRole = keyof typeof BOARD_LIMITS;
 type BoardPathKind = 'main' | 'hub' | 'bonusDetour' | 'riskyShortcut';
 
@@ -954,6 +963,8 @@ function generateBoard(targetMinutes: number, playerCount: number): GeneratedBoa
     });
   });
 
+  const startKey = coordKey(mainPath[0]);
+  const finishKey = coordKey(mainPath[mainPath.length - 1]);
   const hubPairs = hubIndexes
     .slice(0, -1)
     .map((startIndex, index) => ({
@@ -974,9 +985,11 @@ function generateBoard(targetMinutes: number, playerCount: number): GeneratedBoa
       targetTileCount - tilesByKey.size
     );
 
+    const candidateTilesByKey = new Map(tilesByKey);
+
     branch.forEach((coord) => {
-      if (tilesByKey.size < targetTileCount) {
-        tilesByKey.set(coordKey(coord), {
+      if (candidateTilesByKey.size < targetTileCount) {
+        candidateTilesByKey.set(coordKey(coord), {
           ...coord,
           isMainPath: false,
           isHub: false,
@@ -984,10 +997,15 @@ function generateBoard(targetMinutes: number, playerCount: number): GeneratedBoa
         });
       }
     });
+
+    if (isBoardConnectivityAllowed(candidateTilesByKey, startKey, finishKey)) {
+      tilesByKey.clear();
+      candidateTilesByKey.forEach((tile, key) => {
+        tilesByKey.set(key, tile);
+      });
+    }
   }
 
-  const startKey = coordKey(mainPath[0]);
-  const finishKey = coordKey(mainPath[mainPath.length - 1]);
   const rawTiles = Array.from(tilesByKey.values()).sort((a, b) => {
     const aKey = coordKey(a);
     const bKey = coordKey(b);
@@ -1055,18 +1073,62 @@ function buildForwardBranch(
 ) {
   const branch: Array<{ q: number; r: number }> = [];
   const isUpperBranch = offset < 0;
-  const lane = isUpperBranch ? -1 : 1;
-  const firstQ = isUpperBranch ? start.q + 1 : start.q;
-  const lastQ = isUpperBranch ? finish.q : finish.q - 1;
+  const connectorLane = isUpperBranch ? -1 : 1;
+  const detourLane = isUpperBranch ? -2 : 2;
+  const firstQ = isUpperBranch ? start.q + 1 : start.q - 1;
+  const lastQ = finish.q;
+
+  branch.push({ q: firstQ, r: connectorLane });
 
   for (let q = firstQ; q <= lastQ; q += 1) {
-    branch.push({ q, r: lane });
+    branch.push({ q, r: detourLane });
   }
 
+  branch.push({ q: finish.q, r: connectorLane });
+
   const cleanBranch = dedupeCoords(branch)
-    .filter(coord => coord.q >= start.q && coord.q <= finish.q);
+    .filter(coord => coord.q >= start.q - 1 && coord.q <= finish.q);
 
   return cleanBranch.length <= remainingSlots ? cleanBranch : [];
+}
+
+function isBoardConnectivityAllowed(
+  tilesByKey: Map<string, { q: number; r: number }>,
+  startKey: string,
+  finishKey: string
+) {
+  const connectionCounts = getBoardConnectionCounts(tilesByKey);
+  const maxHighConnectionTiles = Math.floor(tilesByKey.size * 0.15);
+  let highConnectionTileCount = 0;
+
+  for (const [key, connectionCount] of connectionCounts) {
+    if (key === startKey || key === finishKey) {
+      if (connectionCount < 1 || connectionCount > 2) return false;
+      continue;
+    }
+
+    if (connectionCount === 2) continue;
+    if (connectionCount < 2) return false;
+
+    highConnectionTileCount += 1;
+    if (highConnectionTileCount > maxHighConnectionTiles) return false;
+  }
+
+  return true;
+}
+
+function getBoardConnectionCounts(tilesByKey: Map<string, { q: number; r: number }>) {
+  const connectionCounts = new Map<string, number>();
+
+  tilesByKey.forEach((tile, key) => {
+    const connectionCount = HEX_NEIGHBOR_DIRECTIONS.filter(direction =>
+      tilesByKey.has(coordKey({ q: tile.q + direction.q, r: tile.r + direction.r }))
+    ).length;
+
+    connectionCounts.set(key, connectionCount);
+  });
+
+  return connectionCounts;
 }
 
 function chooseBoardRole(
