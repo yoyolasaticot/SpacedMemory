@@ -21,7 +21,7 @@ ALTER TABLE community_boards ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Community boards are readable" ON community_boards;
 DROP POLICY IF EXISTS "Users can create community boards" ON community_boards;
 DROP POLICY IF EXISTS "Creators and admins can update community boards" ON community_boards;
-DROP POLICY IF EXISTS "Creators and admins can delete community boards" ON community_boards;
+DROP POLICY IF EXISTS "Creators and admins can delete communi vty boards" ON community_boards;
 DROP POLICY IF EXISTS "Creators can update community boards" ON community_boards;
 DROP POLICY IF EXISTS "Creators can delete community boards" ON community_boards;
 

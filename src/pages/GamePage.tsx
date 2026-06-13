@@ -1306,6 +1306,21 @@ function BoardPreview({
   const maxX = Math.max(...positions.map(position => position.x)) + hexWidth;
   const minY = Math.min(...positions.map(position => position.y)) - hexHeight;
   const maxY = Math.max(...positions.map(position => position.y)) + hexHeight;
+  const baseWidth = maxX - minX;
+  const baseHeight = maxY - minY;
+  const landscapeAspectRatio = 16 / 9;
+  const landscapeZoomOut = 1.2;
+  const landscapeWidth = baseWidth / baseHeight > landscapeAspectRatio
+    ? baseWidth * landscapeZoomOut
+    : baseHeight * landscapeAspectRatio * landscapeZoomOut;
+  const landscapeHeight = baseWidth / baseHeight > landscapeAspectRatio
+    ? (baseWidth / landscapeAspectRatio) * landscapeZoomOut
+    : baseHeight * landscapeZoomOut;
+  const centerX = minX + baseWidth / 2;
+  const centerY = minY + baseHeight / 2;
+  const viewBox = size === 'landscape'
+    ? `${centerX - landscapeWidth / 2} ${centerY - landscapeHeight / 2} ${landscapeWidth} ${landscapeHeight}`
+    : `${minX} ${minY} ${baseWidth} ${baseHeight}`;
 
   return (
     <div className={`app-panel rounded-lg ${size === 'landscape' ? 'p-4' : 'p-3'}`}>
@@ -1318,12 +1333,13 @@ function BoardPreview({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg bg-white/70 p-2">
+      <div className={`rounded-lg bg-white/70 p-2 ${size === 'landscape' ? 'overflow-hidden' : 'overflow-x-auto'}`}>
         <svg
-          viewBox={`${minX} ${minY} ${maxX - minX} ${maxY - minY}`}
+          viewBox={viewBox}
           className={size === 'landscape'
-            ? 'aspect-[16/9] max-h-[72vh] min-w-[760px] w-full'
+            ? 'aspect-[16/9] max-h-[72vh] w-full'
             : 'h-80 min-w-[520px] w-full'}
+          preserveAspectRatio="xMidYMid meet"
           role="img"
           aria-label="Plateau genere"
         >
