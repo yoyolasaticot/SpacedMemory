@@ -61,6 +61,12 @@ const BOARD_TILE_STYLES = {
   },
 };
 
+const BOARD_ROLE_LIMITS: Record<BoardTileRole, number> = {
+  malus: 9,
+  bonus: 18,
+  neutral: 18,
+};
+
 const HEX_NEIGHBOR_DIRECTIONS = [
   { q: 1, r: 0 },
   { q: -1, r: 0 },
@@ -131,7 +137,7 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
   const [currentCard, setCurrentCard] = useState<Flashcard | null>(null);
   const [currentCardDeckId, setCurrentCardDeckId] = useState<string | null>(null);
   const [isFlipped, setIsFlipped] = useState(false);
-  const [view, setView] = useState<'select' | 'color' | 'board' | 'play'>('select');
+  const [view, setView] = useState<'select' | 'color' | 'board' | 'board-preview' | 'play'>('select');
   const [colorSelectionModalOpen, setColorSelectionModalOpen] = useState(false);
   const [selectedDeckForColor, setSelectedDeckForColor] = useState<Deck | null>(null);
   const [usedFlashcards, setUsedFlashcards] = useState<string[]>([]);
@@ -209,8 +215,9 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
   const hasValidDraftEndpoints = hasSingleEndpoint(customBoardTiles, 'isStart')
     && hasSingleEndpoint(customBoardTiles, 'isFinish')
     && customBoardTiles.every((tile) => !(tile.isStart && tile.isFinish));
+  const hasValidDraftRoleLimits = isBoardWithinRoleLimits(customBoardTiles);
   const canStartWithBoard = allSelectedDecksHaveColor && selectedBoard !== null;
-  const canCreateAndStartWithBoard = allSelectedDecksHaveColor && selectedBoard === null && hasDraftBoardName && hasValidDraftEndpoints;
+  const canCreateAndStartWithBoard = allSelectedDecksHaveColor && selectedBoard === null && hasDraftBoardName && hasValidDraftEndpoints && hasValidDraftRoleLimits;
   const canUseBoardAction = canStartWithBoard || canCreateAndStartWithBoard;
 
   const canQuarantineDeck = (deckId: string | null) => {
@@ -231,23 +238,32 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
 
     setSelectedCommunityBoardId(null);
     setCustomBoardTiles((tiles) => {
+      const newTileRole = isEndpointTool(selectedBoardEditorTool) ? 'neutral' : selectedBoardEditorTool;
       const newTile = createCustomBoardTile(
         q,
         r,
-        isEndpointTool(selectedBoardEditorTool) ? 'neutral' : selectedBoardEditorTool,
+        newTileRole,
         selectedBoardEditorTool === 'start',
         selectedBoardEditorTool === 'finish'
       );
+      let nextTiles: BoardTile[];
 
       if (selectedBoardEditorTool === 'start') {
-        return [...tiles.map((tile) => ({ ...tile, isStart: false })), newTile];
+        nextTiles = [...tiles.map((tile) => ({ ...tile, isStart: false })), newTile];
+      } else if (selectedBoardEditorTool === 'finish') {
+        nextTiles = [...tiles.map((tile) => ({ ...tile, isFinish: false })), newTile];
+      } else {
+        nextTiles = [...tiles, newTile];
       }
 
-      if (selectedBoardEditorTool === 'finish') {
-        return [...tiles.map((tile) => ({ ...tile, isFinish: false })), newTile];
+      const limitError = getBoardRoleLimitError(nextTiles);
+      if (limitError) {
+        setCreateBoardError(limitError);
+        return tiles;
       }
 
-      return [...tiles, newTile];
+      setCreateBoardError('');
+      return nextTiles;
     });
   };
 
@@ -256,44 +272,53 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
     setCustomBoardTiles((tiles) => {
       const targetTile = tiles.find((tile) => tile.id === tileId);
       if (!targetTile) return tiles;
+      let nextTiles: BoardTile[];
 
       if (selectedBoardEditorTool === 'start') {
         if (targetTile.isFinish) return tiles;
 
-        return tiles.map((tile) => ({
+        nextTiles = tiles.map((tile) => ({
           ...tile,
           isStart: tile.id === tileId,
           role: tile.id === tileId ? 'neutral' : tile.role,
           pathKind: tile.id === tileId ? 'main' : tile.pathKind,
         }));
-      }
-
-      if (selectedBoardEditorTool === 'finish') {
+      } else if (selectedBoardEditorTool === 'finish') {
         if (targetTile.isStart) return tiles;
 
-        return tiles.map((tile) => ({
+        nextTiles = tiles.map((tile) => ({
           ...tile,
           isFinish: tile.id === tileId,
           role: tile.id === tileId ? 'neutral' : tile.role,
           pathKind: tile.id === tileId ? 'main' : tile.pathKind,
         }));
+      } else {
+        if (targetTile.isStart || targetTile.isFinish) return tiles;
+
+        if (selectedBoardEditorTool === 'erase') {
+          setCreateBoardError('');
+          return tiles.filter((tile) => tile.id !== tileId);
+        }
+
+        nextTiles = tiles.map((tile) =>
+          tile.id === tileId
+            ? {
+                ...tile,
+                role: selectedBoardEditorTool,
+                pathKind: getPathKindForRole(selectedBoardEditorTool),
+              }
+            : tile
+        );
       }
 
-      if (targetTile.isStart || targetTile.isFinish) return tiles;
-
-      if (selectedBoardEditorTool === 'erase') {
-        return tiles.filter((tile) => tile.id !== tileId);
+      const limitError = getBoardRoleLimitError(nextTiles);
+      if (limitError) {
+        setCreateBoardError(limitError);
+        return tiles;
       }
 
-      return tiles.map((tile) =>
-        tile.id === tileId
-          ? {
-              ...tile,
-              role: selectedBoardEditorTool,
-              pathKind: getPathKindForRole(selectedBoardEditorTool),
-            }
-          : tile
-      );
+      setCreateBoardError('');
+      return nextTiles;
     });
   };
 
@@ -306,6 +331,12 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
 
     if (!hasValidDraftEndpoints) {
       setCreateBoardError('Choisis une case depart et une case arrivee distinctes.');
+      return null;
+    }
+
+    const limitError = getBoardRoleLimitError(customBoardTiles);
+    if (limitError) {
+      setCreateBoardError(limitError);
       return null;
     }
 
@@ -336,13 +367,19 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
     return data ?? null;
   };
 
-  const startGame = async () => {
+  const showBoardBeforeGame = async () => {
     if (!allSelectedDecksHaveColor) return;
 
     if (!selectedBoard) {
       const createdBoard = await createCommunityBoard();
       if (!createdBoard) return;
     }
+
+    setView('board-preview');
+  };
+
+  const startGame = async () => {
+    if (!allSelectedDecksHaveColor) return;
 
     setIsGameInProgress(true);
 
@@ -534,6 +571,34 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
             )}
           </div>
 
+          <BoardPreview board={previewBoard} title={previewBoardTitle} />
+
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            {(Object.keys(BOARD_TILE_STYLES) as BoardTileRole[]).map((role) => (
+              <div key={role} className="rounded-lg bg-white/75 p-2 text-center text-xs font-semibold text-gray-700">
+                <span
+                  className="mx-auto mb-1 block h-4 w-4 rounded"
+                  style={{ backgroundColor: BOARD_TILE_STYLES[role].color }}
+                />
+                {BOARD_TILE_STYLES[role].label} {previewBoard.counts[role]}/{BOARD_ROLE_LIMITS[role]}
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 mb-4">
+            <button
+              onClick={showBoardBeforeGame}
+              disabled={!canUseBoardAction}
+              className={`w-full py-3 rounded-lg font-semibold ${
+                canUseBoardAction
+                  ? 'app-primary'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              {selectedBoard ? 'Voir le plateau en grand' : 'Creer et voir en grand'}
+            </button>
+          </div>
+
           <div className="app-panel rounded-lg p-4 mb-4">
             <h2 className="mb-3 text-lg font-black text-gray-900">Creer un plateau partage</h2>
             <input
@@ -564,9 +629,9 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
 
             <button
               onClick={createCommunityBoard}
-              disabled={!hasDraftBoardName || !hasValidDraftEndpoints}
+              disabled={!hasDraftBoardName || !hasValidDraftEndpoints || !hasValidDraftRoleLimits}
               className={`mt-3 w-full py-3 rounded-lg font-semibold ${
-                hasDraftBoardName && hasValidDraftEndpoints
+                hasDraftBoardName && hasValidDraftEndpoints && hasValidDraftRoleLimits
                   ? 'app-primary'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }`}
@@ -574,36 +639,40 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
               Creer ce plateau
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
 
-          <>
-            <BoardPreview board={previewBoard} title={previewBoardTitle} />
+  if (view === 'board-preview') {
+    return (
+      <div className="min-h-screen app-shell pt-4 pb-24">
+        <div className="px-4">
+          <button
+            onClick={() => setView('board')}
+            className="flex items-center text-violet-700 mb-4 font-medium"
+          >
+            <ChevronLeft className="w-5 h-5 mr-1" />
+            <span>Retour aux plateaux</span>
+          </button>
 
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              {(Object.keys(BOARD_TILE_STYLES) as BoardTileRole[]).map((role) => (
-                <div key={role} className="rounded-lg bg-white/75 p-2 text-center text-xs font-semibold text-gray-700">
-                  <span
-                    className="mx-auto mb-1 block h-4 w-4 rounded"
-                    style={{ backgroundColor: BOARD_TILE_STYLES[role].color }}
-                  />
-                  {BOARD_TILE_STYLES[role].label} {previewBoard.counts[role]}
-                </div>
-              ))}
+          <div className="mission-strip p-5 mb-6">
+            <div className="relative z-10">
+              <h1 className="text-3xl font-black leading-tight">{previewBoardTitle}</h1>
+              <p className="text-sm text-white/78 mt-2">
+                Verifie le plateau en grand avant de lancer la partie.
+              </p>
             </div>
-          </>
-
-          <div className="mt-4">
-            <button
-              onClick={startGame}
-              disabled={!canUseBoardAction}
-              className={`w-full py-3 rounded-lg font-semibold ${
-                canUseBoardAction
-                  ? 'app-primary'
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }`}
-            >
-              {selectedBoard ? 'Commencer' : 'Creer et commencer'}
-            </button>
           </div>
+
+          <BoardPreview board={previewBoard} title={previewBoardTitle} size="landscape" />
+
+          <button
+            onClick={startGame}
+            className="mt-4 w-full py-3 rounded-lg font-semibold app-primary"
+          >
+            Lancer la partie
+          </button>
         </div>
       </div>
     );
@@ -1215,7 +1284,15 @@ function EditableBoardSvg({
   );
 }
 
-function BoardPreview({ board, title = 'Plateau' }: { board: GeneratedBoard; title?: string }) {
+function BoardPreview({
+  board,
+  title = 'Plateau',
+  size = 'default',
+}: {
+  board: GeneratedBoard;
+  title?: string;
+  size?: 'default' | 'landscape';
+}) {
   const hexSize = 22;
   const hexWidth = Math.sqrt(3) * hexSize;
   const hexHeight = 2 * hexSize;
@@ -1231,7 +1308,7 @@ function BoardPreview({ board, title = 'Plateau' }: { board: GeneratedBoard; tit
   const maxY = Math.max(...positions.map(position => position.y)) + hexHeight;
 
   return (
-    <div className="app-panel rounded-lg p-3">
+    <div className={`app-panel rounded-lg ${size === 'landscape' ? 'p-4' : 'p-3'}`}>
       <div className="mb-3 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-black text-gray-900">{title}</h2>
@@ -1244,7 +1321,9 @@ function BoardPreview({ board, title = 'Plateau' }: { board: GeneratedBoard; tit
       <div className="overflow-x-auto rounded-lg bg-white/70 p-2">
         <svg
           viewBox={`${minX} ${minY} ${maxX - minX} ${maxY - minY}`}
-          className="h-80 min-w-[520px] w-full"
+          className={size === 'landscape'
+            ? 'aspect-[16/9] max-h-[72vh] min-w-[760px] w-full'
+            : 'h-80 min-w-[520px] w-full'}
           role="img"
           aria-label="Plateau genere"
         >
@@ -1370,6 +1449,28 @@ function isEndpointTool(tool: BoardEditorTool): tool is 'start' | 'finish' {
 
 function hasSingleEndpoint(tiles: BoardTile[], endpoint: 'isStart' | 'isFinish') {
   return tiles.filter((tile) => tile[endpoint]).length === 1;
+}
+
+function isBoardWithinRoleLimits(tiles: BoardTile[]) {
+  return getBoardRoleLimitError(tiles) === null;
+}
+
+function getBoardRoleLimitError(tiles: BoardTile[]) {
+  const counts = getBoardRoleCounts(tiles);
+  const exceededRole = (Object.keys(BOARD_ROLE_LIMITS) as BoardTileRole[])
+    .find((role) => counts[role] > BOARD_ROLE_LIMITS[role]);
+
+  if (!exceededRole) return null;
+
+  if (exceededRole === 'neutral') {
+    return 'Maximum 18 cases bleues au total, depart et arrivee inclus.';
+  }
+
+  if (exceededRole === 'bonus') {
+    return 'Maximum 18 cases violettes.';
+  }
+
+  return 'Maximum 9 cases rouges.';
 }
 
 function getBoardRoleCounts(tiles: BoardTile[]) {
