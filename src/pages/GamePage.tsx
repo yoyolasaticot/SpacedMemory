@@ -90,7 +90,7 @@ const BOARD_TEMPLATES: BoardTemplate[] = [
 
 type BoardTileRole = 'malus' | 'bonus' | 'neutral';
 type BoardPathKind = 'main' | 'hub' | 'bonusDetour' | 'riskyShortcut';
-type BoardEditorTool = BoardTileRole | 'erase';
+type BoardEditorTool = BoardTileRole | 'start' | 'finish' | 'erase';
 
 interface BoardTile {
   id: string;
@@ -206,8 +206,11 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
   const previewBoard = selectedBoard ?? draftBoard;
   const previewBoardTitle = selectedCommunityBoard?.name ?? (newBoardName.trim() || 'Apercu du nouveau plateau');
   const hasDraftBoardName = newBoardName.trim().length > 0;
+  const hasValidDraftEndpoints = hasSingleEndpoint(customBoardTiles, 'isStart')
+    && hasSingleEndpoint(customBoardTiles, 'isFinish')
+    && customBoardTiles.every((tile) => !(tile.isStart && tile.isFinish));
   const canStartWithBoard = allSelectedDecksHaveColor && selectedBoard !== null;
-  const canCreateAndStartWithBoard = allSelectedDecksHaveColor && selectedBoard === null && hasDraftBoardName;
+  const canCreateAndStartWithBoard = allSelectedDecksHaveColor && selectedBoard === null && hasDraftBoardName && hasValidDraftEndpoints;
   const canUseBoardAction = canStartWithBoard || canCreateAndStartWithBoard;
 
   const canQuarantineDeck = (deckId: string | null) => {
@@ -227,17 +230,56 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
     if (selectedBoardEditorTool === 'erase') return;
 
     setSelectedCommunityBoardId(null);
-    setCustomBoardTiles((tiles) => [
-      ...tiles,
-      createCustomBoardTile(q, r, selectedBoardEditorTool),
-    ]);
+    setCustomBoardTiles((tiles) => {
+      const newTile = createCustomBoardTile(
+        q,
+        r,
+        isEndpointTool(selectedBoardEditorTool) ? 'neutral' : selectedBoardEditorTool,
+        selectedBoardEditorTool === 'start',
+        selectedBoardEditorTool === 'finish'
+      );
+
+      if (selectedBoardEditorTool === 'start') {
+        return [...tiles.map((tile) => ({ ...tile, isStart: false })), newTile];
+      }
+
+      if (selectedBoardEditorTool === 'finish') {
+        return [...tiles.map((tile) => ({ ...tile, isFinish: false })), newTile];
+      }
+
+      return [...tiles, newTile];
+    });
   };
 
   const editCustomBoardTile = (tileId: string) => {
     setSelectedCommunityBoardId(null);
     setCustomBoardTiles((tiles) => {
       const targetTile = tiles.find((tile) => tile.id === tileId);
-      if (!targetTile || targetTile.isStart || targetTile.isFinish) return tiles;
+      if (!targetTile) return tiles;
+
+      if (selectedBoardEditorTool === 'start') {
+        if (targetTile.isFinish) return tiles;
+
+        return tiles.map((tile) => ({
+          ...tile,
+          isStart: tile.id === tileId,
+          role: tile.id === tileId ? 'neutral' : tile.role,
+          pathKind: tile.id === tileId ? 'main' : tile.pathKind,
+        }));
+      }
+
+      if (selectedBoardEditorTool === 'finish') {
+        if (targetTile.isStart) return tiles;
+
+        return tiles.map((tile) => ({
+          ...tile,
+          isFinish: tile.id === tileId,
+          role: tile.id === tileId ? 'neutral' : tile.role,
+          pathKind: tile.id === tileId ? 'main' : tile.pathKind,
+        }));
+      }
+
+      if (targetTile.isStart || targetTile.isFinish) return tiles;
 
       if (selectedBoardEditorTool === 'erase') {
         return tiles.filter((tile) => tile.id !== tileId);
@@ -259,6 +301,11 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
     const boardName = newBoardName.trim();
     if (!boardName) {
       setCreateBoardError('Donne un nom au plateau.');
+      return null;
+    }
+
+    if (!hasValidDraftEndpoints) {
+      setCreateBoardError('Choisis une case depart et une case arrivee distinctes.');
       return null;
     }
 
@@ -517,9 +564,9 @@ export default function GamePage({ user, setIsGameInProgress }: GamePageProps) {
 
             <button
               onClick={createCommunityBoard}
-              disabled={!hasDraftBoardName}
+              disabled={!hasDraftBoardName || !hasValidDraftEndpoints}
               className={`mt-3 w-full py-3 rounded-lg font-semibold ${
-                hasDraftBoardName
+                hasDraftBoardName && hasValidDraftEndpoints
                   ? 'app-primary'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }`}
@@ -1022,7 +1069,7 @@ function BoardEditor({
 
   return (
     <div>
-      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
         {(['neutral', 'bonus', 'malus'] as BoardTileRole[]).map((role) => (
           <button
             key={role}
@@ -1035,6 +1082,22 @@ function BoardEditor({
             {BOARD_TILE_STYLES[role].label}
           </button>
         ))}
+        <button
+          onClick={() => onSelectTool('start')}
+          className={`rounded-lg p-2 text-sm font-semibold app-muted-button ${
+            selectedTool === 'start' ? 'ring-2 ring-gray-900' : ''
+          }`}
+        >
+          Depart
+        </button>
+        <button
+          onClick={() => onSelectTool('finish')}
+          className={`rounded-lg p-2 text-sm font-semibold app-muted-button ${
+            selectedTool === 'finish' ? 'ring-2 ring-gray-900' : ''
+          }`}
+        >
+          Arrivee
+        </button>
         <button
           onClick={() => onSelectTool('erase')}
           className={`rounded-lg p-2 text-sm font-semibold app-muted-button ${
@@ -1299,6 +1362,14 @@ function getPathKindForRole(role: BoardTileRole): BoardPathKind {
   if (role === 'malus') return 'riskyShortcut';
 
   return 'main';
+}
+
+function isEndpointTool(tool: BoardEditorTool): tool is 'start' | 'finish' {
+  return tool === 'start' || tool === 'finish';
+}
+
+function hasSingleEndpoint(tiles: BoardTile[], endpoint: 'isStart' | 'isFinish') {
+  return tiles.filter((tile) => tile[endpoint]).length === 1;
 }
 
 function getBoardRoleCounts(tiles: BoardTile[]) {
