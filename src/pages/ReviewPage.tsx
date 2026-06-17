@@ -6,6 +6,7 @@ import { supabase, Deck, Flashcard, ReviewProgress } from '../lib/supabase';
 type ReviewView = 'select' | 'review' | 'done';
 type Rating = 'again' | 'hard' | 'good' | 'easy';
 type ReviewState = 'new' | 'learning' | 'review' | 'relearning';
+type FlashcardSummary = Pick<Flashcard, 'id' | 'deck_id'>;
 
 const INITIAL_EASE_FACTOR = 2.5;
 const MIN_EASE_FACTOR = 1.3;
@@ -16,6 +17,8 @@ const EASY_INTERVAL_DAYS = 4;
 const HARD_INTERVAL_FACTOR = 1.2;
 const EASY_BONUS = 1.3;
 const MAX_INTERVAL_DAYS = 36500;
+const SUPABASE_PAGE_SIZE = 1000;
+const SUPABASE_IN_FILTER_CHUNK_SIZE = 100;
 
 const REVIEW_OPTIONS: Array<{
   rating: Rating;
@@ -62,6 +65,7 @@ export default function ReviewPage({ user }: ReviewPageProps) {
   const [showAnswer, setShowAnswer] = useState(false);
   const [view, setView] = useState<ReviewView>('select');
   const [isLoading, setIsLoading] = useState(false);
+  const [isRating, setIsRating] = useState(false);
   const [message, setMessage] = useState('');
   const [quarantineModalOpen, setQuarantineModalOpen] = useState(false);
   const [quarantineNote, setQuarantineNote] = useState('');
@@ -98,12 +102,9 @@ export default function ReviewPage({ user }: ReviewPageProps) {
   };
 
   const loadReviewCounts = async () => {
-    const { data, error } = await supabase
-      .from('flashcards')
-      .select('id, deck_id')
-      .eq('status', 'active');
+    const data = await fetchActiveFlashcardSummaries();
 
-    if (error || !data) {
+    if (!data) {
       return;
     }
 
@@ -134,22 +135,18 @@ export default function ReviewPage({ user }: ReviewPageProps) {
     setIsLoading(true);
     setMessage('');
 
-    const { data, error } = await supabase
-      .from('flashcards')
-      .select('*')
-      .in('deck_id', selectedDeckIds)
-      .eq('status', 'active');
+    const data = await fetchActiveFlashcardsByDeck(selectedDeckIds);
 
-    setIsLoading(false);
-
-    if (error) {
+    if (!data) {
       setMessage("Impossible de charger les cartes a reviser.");
+      setIsLoading(false);
       return;
     }
 
     if (!data || data.length === 0) {
       setCards([]);
       setMessage('Aucune carte due pour ces paquets.');
+      setIsLoading(false);
       return;
     }
 
@@ -160,6 +157,7 @@ export default function ReviewPage({ user }: ReviewPageProps) {
     if (dueCards.length === 0) {
       setCards([]);
       setMessage('Aucune carte due pour ces paquets.');
+      setIsLoading(false);
       return;
     }
 
@@ -167,44 +165,56 @@ export default function ReviewPage({ user }: ReviewPageProps) {
     setCurrentIndex(0);
     setShowAnswer(false);
     setView('review');
+    setIsLoading(false);
   };
 
   const rateCurrentCard = async (rating: Rating) => {
-    if (!currentCard) return;
+    if (!currentCard || isRating) return;
 
-    const { data: existingProgress } = await supabase
-      .from('review_progress')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('flashcard_id', currentCard.id)
-      .maybeSingle();
-
-    const schedule = getNextSchedule(existingProgress, rating);
-
-    const { error } = await supabase
-      .from('review_progress')
-      .upsert({
-        user_id: user.id,
-        flashcard_id: currentCard.id,
-        ...schedule,
-      });
-
-    if (error) {
-      setMessage("La note n'a pas pu etre enregistree.");
-      return;
-    }
-
-    await updateEarlyDifficulty(currentCard, rating, schedule.review_count);
-
-    if (currentIndex + 1 >= cards.length) {
-      setView('done');
-      setShowAnswer(false);
-      return;
-    }
-
-    setCurrentIndex(prev => prev + 1);
-    setShowAnswer(false);
+    setIsRating(true);
     setMessage('');
+
+    try {
+      const { data: existingProgress, error: progressError } = await supabase
+        .from('review_progress')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('flashcard_id', currentCard.id)
+        .maybeSingle();
+
+      if (progressError) {
+        setMessage("Impossible de charger la progression de cette carte.");
+        return;
+      }
+
+      const schedule = getNextSchedule(existingProgress, rating);
+
+      const { error } = await supabase
+        .from('review_progress')
+        .upsert({
+          user_id: user.id,
+          flashcard_id: currentCard.id,
+          ...schedule,
+        });
+
+      if (error) {
+        setMessage(getReviewProgressErrorMessage(error.message));
+        return;
+      }
+
+      await updateEarlyDifficulty(currentCard, rating, schedule.review_count);
+
+      if (currentIndex + 1 >= cards.length) {
+        setView('done');
+        setShowAnswer(false);
+        return;
+      }
+
+      setCurrentIndex(prev => prev + 1);
+      setShowAnswer(false);
+    } finally {
+      setIsRating(false);
+    }
   };
 
   const quarantineCurrentCard = async () => {
@@ -278,17 +288,23 @@ export default function ReviewPage({ user }: ReviewPageProps) {
       return {};
     }
 
-    const { data, error } = await supabase
-      .from('review_progress')
-      .select('*')
-      .eq('user_id', user.id)
-      .in('flashcard_id', flashcardIds);
+    const progressRows: ReviewProgress[] = [];
 
-    if (error || !data) {
-      return {};
+    for (const flashcardIdChunk of chunkArray(flashcardIds, SUPABASE_IN_FILTER_CHUNK_SIZE)) {
+      const { data, error } = await supabase
+        .from('review_progress')
+        .select('*')
+        .eq('user_id', user.id)
+        .in('flashcard_id', flashcardIdChunk);
+
+      if (error || !data) {
+        return {};
+      }
+
+      progressRows.push(...data);
     }
 
-    return data.reduce<Record<string, ReviewProgress>>((progressByCard, progress) => {
+    return progressRows.reduce<Record<string, ReviewProgress>>((progressByCard, progress) => {
       progressByCard[progress.flashcard_id] = progress;
       return progressByCard;
     }, {});
@@ -360,7 +376,8 @@ export default function ReviewPage({ user }: ReviewPageProps) {
                 <button
                   key={option.rating}
                   onClick={() => rateCurrentCard(option.rating)}
-                  className={`p-3 rounded-lg text-white text-left transition-colors ${option.className}`}
+                  disabled={isRating}
+                  className={`p-3 rounded-lg text-white text-left transition-colors disabled:opacity-60 disabled:cursor-wait ${option.className}`}
                 >
                   <div className="font-bold">{option.label}</div>
                   <div className="text-xs opacity-90">{option.detail}</div>
@@ -569,6 +586,72 @@ function getNextSchedule(progress: ReviewProgress | null, rating: Rating) {
     ease_factor: schedule.easeFactor,
     lapse_count: schedule.lapseCount,
   };
+}
+
+async function fetchActiveFlashcardSummaries() {
+  const cards: FlashcardSummary[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('flashcards')
+      .select('id, deck_id')
+      .eq('status', 'active')
+      .range(from, from + SUPABASE_PAGE_SIZE - 1);
+
+    if (error || !data) {
+      return null;
+    }
+
+    cards.push(...data);
+
+    if (data.length < SUPABASE_PAGE_SIZE) {
+      return cards;
+    }
+
+    from += SUPABASE_PAGE_SIZE;
+  }
+}
+
+async function fetchActiveFlashcardsByDeck(deckIds: string[]) {
+  const cards: Flashcard[] = [];
+
+  for (const deckIdChunk of chunkArray(deckIds, SUPABASE_IN_FILTER_CHUNK_SIZE)) {
+    let from = 0;
+
+    while (true) {
+      const { data, error } = await supabase
+        .from('flashcards')
+        .select('*')
+        .in('deck_id', deckIdChunk)
+        .eq('status', 'active')
+        .range(from, from + SUPABASE_PAGE_SIZE - 1);
+
+      if (error || !data) {
+        return null;
+      }
+
+      cards.push(...data);
+
+      if (data.length < SUPABASE_PAGE_SIZE) {
+        break;
+      }
+
+      from += SUPABASE_PAGE_SIZE;
+    }
+  }
+
+  return cards;
+}
+
+function chunkArray<T>(items: T[], chunkSize: number) {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+
+  return chunks;
 }
 
 function scheduleAnkiStyle({
@@ -903,4 +986,21 @@ function getQuarantineErrorMessage(message: string) {
   }
 
   return "La carte n'a pas pu etre mise en quarantaine.";
+}
+
+function getReviewProgressErrorMessage(message: string) {
+  if (
+    message.includes('learning_step')
+    || message.includes('ease_factor')
+    || message.includes('lapse_count')
+    || message.includes('review_state')
+  ) {
+    return "La migration de revision Anki n'a pas encore ete appliquee dans Supabase.";
+  }
+
+  if (message.includes('review_progress')) {
+    return "La table de progression de revision n'est pas disponible dans Supabase.";
+  }
+
+  return "La note n'a pas pu etre enregistree.";
 }

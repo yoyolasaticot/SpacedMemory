@@ -76,7 +76,7 @@ const HEX_NEIGHBOR_DIRECTIONS = [
   { q: -1, r: 1 },
 ];
 
-const BOARD_TEMPLATES: BoardTemplate[] = [
+export const BOARD_TEMPLATES: BoardTemplate[] = [
   {
     id: 'classic',
     name: 'Classique',
@@ -1204,18 +1204,11 @@ function EditableBoardSvg({
   const hexWidth = Math.sqrt(3) * hexSize;
   const hexHeight = 2 * hexSize;
   const points = getHexPoints(hexSize);
-  const tilePositions = board.tiles.map((tile) => ({
+  const positions = board.tiles.map((tile) => ({
     tile,
     x: hexWidth * (tile.q + tile.r / 2),
     y: hexSize * 1.5 * tile.r,
   }));
-  const positions = size === 'landscape'
-    ? tilePositions.map(({ tile, x, y }) => ({
-        tile,
-        x: -y,
-        y: x,
-      }))
-    : tilePositions;
   const candidatePositions = candidateCoords.map((coord) => ({
     coord,
     x: hexWidth * (coord.q + coord.r / 2),
