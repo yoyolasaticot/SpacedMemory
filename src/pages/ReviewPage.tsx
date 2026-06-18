@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Component, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { User } from '@supabase/supabase-js';
 import { Check, ChevronLeft, RotateCcw } from 'lucide-react';
 import { supabase, Deck, Flashcard, ReviewProgress } from '../lib/supabase';
@@ -6,7 +6,6 @@ import { supabase, Deck, Flashcard, ReviewProgress } from '../lib/supabase';
 type ReviewView = 'select' | 'review' | 'done';
 type Rating = 'again' | 'hard' | 'good' | 'easy';
 type ReviewState = 'new' | 'learning' | 'review' | 'relearning';
-type FlashcardSummary = Pick<Flashcard, 'id' | 'deck_id'>;
 
 const INITIAL_EASE_FACTOR = 2.5;
 const MIN_EASE_FACTOR = 1.3;
@@ -56,7 +55,49 @@ interface ReviewPageProps {
   user: User;
 }
 
+class ReviewErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen app-shell pt-10 pb-24 px-4 flex items-center">
+          <div className="w-full app-panel rounded-2xl p-6 text-center">
+            <h1 className="text-2xl font-black brand-title mb-2">Revision indisponible</h1>
+            <p className="text-gray-600 mb-6">
+              Un probleme d'affichage a ete detecte. Reviens sur cette page pour relancer le mode revision.
+            </p>
+            <button
+              onClick={() => this.setState({ hasError: false })}
+              className="w-full py-3 app-primary rounded-lg font-semibold"
+            >
+              Reessayer
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 export default function ReviewPage({ user }: ReviewPageProps) {
+  return (
+    <ReviewErrorBoundary>
+      <ReviewContent user={user} />
+    </ReviewErrorBoundary>
+  );
+}
+
+function ReviewContent({ user }: ReviewPageProps) {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [dueCountsByDeck, setDueCountsByDeck] = useState<Record<string, number>>({});
   const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>([]);
@@ -70,9 +111,16 @@ export default function ReviewPage({ user }: ReviewPageProps) {
   const [quarantineModalOpen, setQuarantineModalOpen] = useState(false);
   const [quarantineNote, setQuarantineNote] = useState('');
   const [quarantineError, setQuarantineError] = useState('');
+  const countsRequestIdRef = useRef(0);
 
   useEffect(() => {
-    loadDecks();
+    const requestId = countsRequestIdRef.current + 1;
+    countsRequestIdRef.current = requestId;
+    loadDecks(requestId);
+
+    return () => {
+      countsRequestIdRef.current += 1;
+    };
   }, [user.id]);
 
   const currentCard = cards[currentIndex] ?? null;
@@ -88,37 +136,53 @@ export default function ReviewPage({ user }: ReviewPageProps) {
     return decks.find(deck => deck.id === currentCard.deck_id)?.name ?? 'Paquet';
   }, [currentCard, decks]);
 
-  const loadDecks = async () => {
+  const loadDecks = async (requestId: number) => {
     const { data, error } = await supabase
       .from('decks')
       .select('*')
       .order('name', { ascending: true });
 
-    if (!error && data) {
-      setDecks(data);
-    }
-
-    await loadReviewCounts();
-  };
-
-  const loadReviewCounts = async () => {
-    const data = await fetchActiveFlashcardSummaries();
-
-    if (!data) {
+    if (requestId !== countsRequestIdRef.current) {
       return;
     }
 
-    const progressByCard = await loadProgressByCard(data.map(card => card.id));
-    const now = new Date();
+    if (!error && data) {
+      setDecks(data);
+      await loadReviewCounts(requestId, data.map(deck => deck.id));
+      return;
+    }
 
-    const nextCounts = data.filter(card => {
-      return isCardDue(progressByCard[card.id], now);
-    }).reduce<Record<string, number>>((counts, card) => {
-      counts[card.deck_id] = (counts[card.deck_id] ?? 0) + 1;
-      return counts;
-    }, {});
+    setMessage("Impossible de charger les paquets de revision.");
+  };
 
-    setDueCountsByDeck(nextCounts);
+  const refreshReviewCounts = async () => {
+    const requestId = countsRequestIdRef.current + 1;
+    countsRequestIdRef.current = requestId;
+    await loadReviewCounts(requestId, decks.map(deck => deck.id));
+  };
+
+  const loadReviewCounts = async (requestId: number, deckIds: string[]) => {
+    if (deckIds.length === 0) {
+      setDueCountsByDeck({});
+      return;
+    }
+
+    setDueCountsByDeck({});
+
+    const result = await countDueCardsByDeck({
+      deckIds,
+      loadProgressByCard,
+      shouldContinue: () => requestId === countsRequestIdRef.current,
+      onProgress: (nextCounts) => {
+        if (requestId === countsRequestIdRef.current) {
+          setDueCountsByDeck(nextCounts);
+        }
+      },
+    });
+
+    if (!result && requestId === countsRequestIdRef.current) {
+      setMessage("Impossible de calculer les cartes a reviser.");
+    }
   };
 
   const toggleDeck = (deckId: string) => {
@@ -247,7 +311,7 @@ export default function ReviewPage({ user }: ReviewPageProps) {
     setQuarantineNote('');
     setQuarantineError('');
     setMessage('');
-    loadReviewCounts();
+    refreshReviewCounts();
 
     if (nextCards.length === 0) {
       setView('done');
@@ -319,7 +383,7 @@ export default function ReviewPage({ user }: ReviewPageProps) {
     setQuarantineModalOpen(false);
     setQuarantineNote('');
     setQuarantineError('');
-    loadReviewCounts();
+    refreshReviewCounts();
   };
 
   if (view === 'review' && currentCard) {
@@ -588,31 +652,6 @@ function getNextSchedule(progress: ReviewProgress | null, rating: Rating) {
   };
 }
 
-async function fetchActiveFlashcardSummaries() {
-  const cards: FlashcardSummary[] = [];
-  let from = 0;
-
-  while (true) {
-    const { data, error } = await supabase
-      .from('flashcards')
-      .select('id, deck_id')
-      .eq('status', 'active')
-      .range(from, from + SUPABASE_PAGE_SIZE - 1);
-
-    if (error || !data) {
-      return null;
-    }
-
-    cards.push(...data);
-
-    if (data.length < SUPABASE_PAGE_SIZE) {
-      return cards;
-    }
-
-    from += SUPABASE_PAGE_SIZE;
-  }
-}
-
 async function fetchActiveFlashcardsByDeck(deckIds: string[]) {
   const cards: Flashcard[] = [];
 
@@ -644,6 +683,57 @@ async function fetchActiveFlashcardsByDeck(deckIds: string[]) {
   return cards;
 }
 
+async function countDueCardsByDeck({
+  deckIds,
+  loadProgressByCard,
+  shouldContinue,
+  onProgress,
+}: {
+  deckIds: string[];
+  loadProgressByCard: (flashcardIds: string[]) => Promise<Record<string, ReviewProgress>>;
+  shouldContinue: () => boolean;
+  onProgress: (counts: Record<string, number>) => void;
+}) {
+  const counts: Record<string, number> = {};
+
+  for (const deckIdChunk of chunkArray(deckIds, SUPABASE_IN_FILTER_CHUNK_SIZE)) {
+    let from = 0;
+
+    while (shouldContinue()) {
+      const { data, error } = await supabase
+        .from('flashcards')
+        .select('id, deck_id')
+        .in('deck_id', deckIdChunk)
+        .eq('status', 'active')
+        .range(from, from + SUPABASE_PAGE_SIZE - 1);
+
+      if (error || !data) {
+        return false;
+      }
+
+      const progressByCard = await loadProgressByCard(data.map(card => card.id));
+      const now = new Date();
+
+      data.forEach(card => {
+        if (isCardDue(progressByCard[card.id], now)) {
+          counts[card.deck_id] = (counts[card.deck_id] ?? 0) + 1;
+        }
+      });
+
+      onProgress({ ...counts });
+
+      if (data.length < SUPABASE_PAGE_SIZE) {
+        break;
+      }
+
+      from += SUPABASE_PAGE_SIZE;
+      await waitForBrowser();
+    }
+  }
+
+  return true;
+}
+
 function chunkArray<T>(items: T[], chunkSize: number) {
   const chunks: T[][] = [];
 
@@ -652,6 +742,12 @@ function chunkArray<T>(items: T[], chunkSize: number) {
   }
 
   return chunks;
+}
+
+function waitForBrowser() {
+  return new Promise(resolve => {
+    window.setTimeout(resolve, 0);
+  });
 }
 
 function scheduleAnkiStyle({
