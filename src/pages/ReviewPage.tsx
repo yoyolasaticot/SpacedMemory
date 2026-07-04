@@ -266,8 +266,6 @@ function ReviewContent({ user }: ReviewPageProps) {
         return;
       }
 
-      await updateEarlyDifficulty(currentCard, rating, schedule.review_count);
-
       if (currentIndex + 1 >= cards.length) {
         setView('done');
         setShowAnswer(false);
@@ -316,35 +314,6 @@ function ReviewContent({ user }: ReviewPageProps) {
     if (nextCards.length === 0) {
       setView('done');
     }
-  };
-
-  const updateEarlyDifficulty = async (
-    flashcard: Flashcard,
-    rating: Rating,
-    reviewCount: number
-  ) => {
-    if (reviewCount > 3) return;
-
-    const { data, error } = await supabase.rpc(
-      'adjust_flashcard_difficulty_from_review',
-      {
-        target_flashcard_id: flashcard.id,
-        review_rating: rating,
-        player_review_count: reviewCount,
-      }
-    );
-
-    if (error || typeof data !== 'number') {
-      return;
-    }
-
-    setCards(prevCards =>
-      prevCards.map(card =>
-        card.id === flashcard.id
-          ? { ...card, difficulty: data }
-          : card
-      )
-    );
   };
 
   const loadProgressByCard = async (flashcardIds: string[]) => {
